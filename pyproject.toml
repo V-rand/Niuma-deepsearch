@@ -1,0 +1,38 @@
+[project]
+name = "agent-os4law"
+version = "0.1.0"
+description = "Agent OS - 法律智能体操作系统"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.13.3",
+    "jieba>=0.42.1",
+    "openai>=2.29.0",
+    "prompt-toolkit>=3.0.52",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+    "requests>=2.32.5",
+    "pymupdf4llm>=0.0.17",
+    "trafilatura>=2.0.0",
+    "rich>=15.0.0",
+    "doc2txt>=1.0.8",
+    "python-docx>=1.2.0",
+    "textual>=8.2.5",
+]
+
+[project.scripts]
+agent-os = "cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8.5", "pytest-asyncio>=0.26", "pytest-timeout>=2.3"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+timeout = 120
+markers = [
+    "network: tests that require external API access (law_retrieve, web_search, etc.)",
+    "slow: tests that take >30 seconds",
+    "integration: tests that require AgentOS startup with database",
+]

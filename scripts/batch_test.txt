@@ -1,0 +1,5 @@
+/switch 压缩测试完整
+用 file_write 在 drafts/hello.md 写入一句话 "集成测试通过"。
+然后读取 draft/hello.md 确认内容正确。
+然后用 file_grep 搜索 research/ 目录下所有 .md 文件里的 "合同" 关键词。
+最后告诉我完成了什么。

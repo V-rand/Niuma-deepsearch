@@ -1,0 +1,9 @@
+你现在在"压缩测试完整"工作区。执行以下任务：
+
+1. 用 law_retrieve 检索"民法典 合同解除 第563条"
+2. 用 file_write 把检索结果写入 drafts/contract_analysis.md
+3. 用 todowrite 创建 2 个 todo：合同解除分析 [in_progress]、法律意见书 [pending]
+4. 用 file_read 读取 drafts/contract_analysis.md 确认内容
+5. 再读一次 drafts/contract_analysis.md
+
+完成后告诉我每个步骤的结果。
