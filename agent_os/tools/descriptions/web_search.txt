@@ -1,0 +1,18 @@
+搜索外部网络获取信息（Tavily/Serper 双引擎回退）。
+
+参数：
+- query: 搜索查询
+- max_results: 最大返回结果数（默认8）
+
+返回：
+- query: 原始查询
+- results: [{title, url, content}]
+- count: 结果数
+
+结果自动归档到 raw_search/web_search/。
+
+优先级：先 workspace_search（已有材料）→ 先 law/case_retrieve（法规案例）→ 最后 web_search
+
+并行提示：
+- 多个独立搜索可以同时发起（同一轮多次 web_search），系统会并行执行
+- 例如：需要搜索不同关键词时，一次返回多个 web_search 调用

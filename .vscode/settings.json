@@ -1,0 +1,15 @@
+{
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.analysis.extraPaths": ["${workspaceFolder}"],
+    "python.analysis.typeCheckingMode": "basic",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit"
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.venv": true,
+        "**/*.pyc": true,
+        "**/.pytest_cache": true
+    }
+}

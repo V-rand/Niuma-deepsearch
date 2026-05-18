@@ -50,7 +50,7 @@ workspace:
 # 全部可用工具：file_read, file_write, file_append, file_delete, file_list,
 #   file_grep, file_tree, workspace_search, law_retrieve, case_retrieve,
 #   web_search, web_read, upload_parse, bash, todowrite, reminder_create,
-#   memory_update, spawn, skill_use
+#   spawn, skill_use
 # 不需要的工具写在这里，它们的 schema 不会发给模型：
 disabled_tools: []
 

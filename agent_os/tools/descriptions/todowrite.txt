@@ -1,0 +1,20 @@
+创建和管理结构化待办事项列表。每次调用是全量替换——传入完整列表，不是增量 patch。
+
+参数：
+- todos: [{content, status, priority?}]
+
+status 可选值：
+- pending: 未开始
+- in_progress: 进行中（同一时间只能有一个）
+- completed: 已完成
+- blocked: 被阻塞
+- cancelled: 已取消
+
+返回：
+- todos: 更新后的完整列表
+- active_count: 未完成数量
+- total_count: 总数
+
+规则：
+- 完成一个子任务后立刻标记，不要批量
+- 创建 todo 后继续调工具推进（todowrite 不自动执行）

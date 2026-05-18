@@ -1,0 +1,18 @@
+读取网页/在线文档内容（Jina → Firecrawl → Trafilatura 多引擎回退）。
+
+参数：
+- url: 要读取的网页 URL
+
+返回：
+- url: 规范化后的 URL
+- content: 网页正文经 LLM 摘要后的精简版
+- parser: 实际使用的解析引擎
+- _filtered: 是否被摘要（大内容会先摘要再入上下文）
+
+注意：
+- 网页全文已自动归档到 raw_search/web_read/，需要完整内容可用 file_read 读取
+- PDF 和 Office 文档先用 MinerU 解析，失败后回退到网页引擎
+- 解析本地文件用 file_read，不是 web_read
+
+并行提示：
+- 多个独立网页可以同时读取（同一轮多次 web_read），系统会并行执行

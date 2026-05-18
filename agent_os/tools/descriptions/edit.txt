@@ -1,0 +1,21 @@
+在文件中做 find-and-replace。
+
+参数：
+- path: 文件路径
+- old_string: 要被替换的原文（必须在文件中唯一）
+- new_string: 替换后的新内容
+
+返回：
+- path: 文件路径
+- diff: 显示变更内容的摘要
+
+匹配规则：
+1. 先尝试精确匹配
+2. 如果失败，按行归一化 whitespace 后重试
+3. 多处匹配 → 报错，提供更多上下文
+4. 找不到 → 返回附近行帮助定位
+
+典型用法：
+  1. file_grep 或 file_read 定位要修改的文本
+  2. edit(path, old_string, new_string) 修改
+  3. 大段重写用 file_write，不是 edit

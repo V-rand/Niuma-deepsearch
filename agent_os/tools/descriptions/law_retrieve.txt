@@ -1,0 +1,12 @@
+检索中国法律法规条文。
+
+参数：
+- query: 法律问题或关键词
+- top_k: 返回结果数量（默认5）
+
+返回：
+- query: 原始查询
+- results: [{title, content, laws_name, article_tag, timeliness_name, active_date}]
+- count: 结果数
+
+结果自动归档到 raw_search/law/，可复用。

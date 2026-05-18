@@ -1,0 +1,16 @@
+解析 uploaded/ 下的原始文件为 Markdown。原件不变。
+
+参数：
+- path: uploads/ 下的文件路径
+- output_path: 输出路径（默认 drafts/derived/{文件名}__{格式}.md）
+- language: 解析语言，默认 ch
+- page_range: PDF 页码范围，如 "1-10"
+
+返回：
+- source_path: 原始文件路径
+- output_path: 生成的 Markdown 路径
+- parser: 解析引擎
+- preview: 内容预览（前300字符）
+
+注意：用户上传的文件会被系统自动解析，通常不需要手动调用此工具。
+只有 auto-parse 失败时才需要手动触发

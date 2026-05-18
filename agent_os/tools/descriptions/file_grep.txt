@@ -1,0 +1,19 @@
+按正则表达式在文件中搜索匹配行。返回文件名、行号、行内容。
+
+参数：
+- pattern: 正则表达式
+- path: 搜索起始目录（默认当前目录）
+- file_pattern: 文件匹配模式，如 *.md（默认所有文件）
+
+返回：
+- pattern: 搜索模式
+- results: [{file, line, content}]
+- count: 匹配结果数
+
+注意：
+- 正则特殊字符需要转义（. * + ? [ ] ( ) { } ^ $ \）
+- 普通关键词搜索用 workspace_search 更高效
+
+典型用法：
+  1. file_grep("违约金") → 定位到具体行
+  2. edit(path, old_string, new_string) → 精确修改
