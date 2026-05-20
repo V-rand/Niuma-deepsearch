@@ -19,6 +19,10 @@ def test_agent_system_includes_short_answer_research_protocol():
     assert "Coverage Map" in prompt
     assert "Source Strategy" in prompt
     assert "Report Review Gate" in prompt
+    assert "<report_writing_protocol>" in prompt
+    assert "Citation Rules" in prompt
+    assert "Anti-AI-Tone Editing" in prompt
+    assert "Formula and Number Rules" in prompt
 
 
 def test_deep_research_protocol_is_not_a_loadable_skill():
@@ -38,15 +42,20 @@ def test_persistent_prompts_absorb_short_answer_research_discipline():
     assert "长文本研究" in agent
     assert "Coverage Map" in agent
     assert "Report Review Gate" in agent
+    assert "报告写作协议" in agent
+    assert "去 AI 味" in agent
+    assert "公式与数字" in agent
     assert "不要把获批、发现、投产、上市、量产混为一谈" in agent
     assert "反确认偏误" in soul
     assert "校准置信度" in soul
     assert "报告效用" in soul
     assert "引用忠实" in soul
+    assert "专业表达" in soul
     assert "Candidate Ledger" in memory
     assert "Evidence Ledger" in memory
     assert "Coverage Map" in memory
     assert "Report Assumptions" in memory
+    assert "Report Style Preferences" in memory
 
 
 def test_default_memory_template_is_research_oriented(tmp_path):
