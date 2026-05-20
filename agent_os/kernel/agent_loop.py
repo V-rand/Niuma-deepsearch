@@ -120,6 +120,7 @@ class AgentLoop:
         self._interrupt_events: dict[str, asyncio.Event] = {}
         self._uploads_snapshots: dict[str, dict[str, tuple[float, int]]] = {}
         self._context_dirty_sessions: set[str] = set()
+        self._memory_dirty_sessions: set[str] = set()
         # Sessions where the model returned a content filter error.
         # Two-level quarantine:
         #   Level 1 (soft): The triggering user message has been deleted from DB.
@@ -789,7 +790,9 @@ class AgentLoop:
             await self.workspace_memory.sync_file_artifact(session_id, arguments.get("path", ""))
         if result.success and tool_name == "file_delete":
             await self.workspace_memory.remove_artifact(session_id, arguments.get("path", ""))
-        if result.success and self._tool_updates_context(tool_name, arguments):
+        if result.success and self._tool_updates_memory_context(tool_name, arguments):
+            self.mark_memory_dirty(session_id)
+        if result.success and self._tool_updates_system_context(tool_name, arguments):
             self.mark_context_dirty(session_id)
         if result.success and tool_name in _PATH_BEARING_TOOLS:
             path = str(arguments.get("path", "") or arguments.get("pattern", "")).strip()
@@ -798,8 +801,12 @@ class AgentLoop:
         return result
 
     def mark_context_dirty(self, session_id: str) -> None:
-        """Mark session for context rebuild on next request, invalidating the KV cache prefix."""
+        """Mark session for system prompt rebuild on next request."""
         self._context_dirty_sessions.add(session_id)
+
+    def mark_memory_dirty(self, session_id: str) -> None:
+        """Mark MEMORY.md for dynamic user-context refresh without rebuilding system prompt."""
+        self._memory_dirty_sessions.add(session_id)
 
     def _try_activate_conditional_skills(self, session_id: str, paths: list[str]) -> None:
         """Activate conditional skills whose paths frontmatter matches *paths*."""
@@ -810,13 +817,20 @@ class AgentLoop:
             self.mark_context_dirty(session_id)
 
     @staticmethod
-    def _tool_updates_context(tool_name: str, arguments: dict[str, Any]) -> bool:
+    def _tool_updates_system_context(tool_name: str, arguments: dict[str, Any]) -> bool:
         if tool_name == "spawn":
             return True
         if tool_name not in {"file_write", "file_append", "file_delete"}:
             return False
         path = str(arguments.get("path", "")).strip().replace("\\", "/").lstrip("/").lower()
-        return path in {"memory.md", "agent.md", "soul.md"}
+        return path in {"agent.md", "soul.md"}
+
+    @staticmethod
+    def _tool_updates_memory_context(tool_name: str, arguments: dict[str, Any]) -> bool:
+        if tool_name not in {"file_write", "file_append", "file_delete"}:
+            return False
+        path = str(arguments.get("path", "")).strip().replace("\\", "/").lstrip("/").lower()
+        return path == "memory.md"
 
     async def _execute_tool_timed(
         self,
@@ -942,6 +956,11 @@ class AgentLoop:
         if cached is not None:
             session = await self.sessions.get(session_id)
             if session is not None and session.status == "active":
+                if session_id in self._memory_dirty_sessions:
+                    refreshed_messages = self._refresh_memory_context_message(session, list(cached["messages"]))
+                    cached = {"messages": refreshed_messages, "system_prompt": cached["system_prompt"]}
+                    self._session_contexts[session_id] = cached
+                    self._memory_dirty_sessions.discard(session_id)
                 return session, list(cached["messages"]), cached["system_prompt"], None
             self._session_contexts.pop(session_id, None)
 
@@ -984,6 +1003,19 @@ class AgentLoop:
 
         self._session_contexts[session_id] = {"messages": messages, "system_prompt": compiled.system_prompt}
         return session, messages, compiled.system_prompt, compiled
+
+    def _refresh_memory_context_message(self, session: Session, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        refreshed = [message for message in messages if not self._is_memory_context_message(message)]
+        memory_content = self.context_compiler.build_memory_content(session)
+        if not memory_content:
+            return refreshed
+        insert_at = 1 if refreshed and refreshed[0].get("role") == "system" else 0
+        refreshed.insert(insert_at, {"role": "user", "content": memory_content})
+        return refreshed
+
+    @staticmethod
+    def _is_memory_context_message(message: dict[str, Any]) -> bool:
+        return message.get("role") == "user" and str(message.get("content", "")).startswith("<memory>\n")
 
     def _get_session_lock(self, session_id: str) -> asyncio.Lock:
         if session_id not in self._session_locks:
@@ -1086,6 +1118,8 @@ class AgentLoop:
             if compiled is None:
                 continue
             messages: list[dict[str, Any]] = [{"role": "system", "content": compiled.system_prompt}]
+            if compiled.memory_content:
+                messages.append({"role": "user", "content": compiled.memory_content})
             tree = self._format_workspace_tree(session.work_dir)
             if tree:
                 messages.append({"role": "user", "content": tree})

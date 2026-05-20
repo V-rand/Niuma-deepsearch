@@ -72,33 +72,41 @@ class ContextCompiler:
         if skills_index:
             prompt_sections.append(skills_index)
 
-        # Build memory content (dynamic - goes in user context, not system prompt)
-        memory_content = ""
-        if work_dir and work_dir.exists():
-            memory_path = work_dir / "MEMORY.md"
-            if memory_path.exists():
-                raw_content = memory_path.read_text(encoding="utf-8")
-                content = raw_content.strip()
-                if content:
-                    # Truncate if exceeds limits
-                    lines = content.split('\n')
-                    if len(lines) > MAX_MEMORY_LINES or len(content) > MAX_MEMORY_BYTES:
-                        original_lines = len(lines)
-                        original_bytes = len(content)
-                        truncated_lines = lines[:MAX_MEMORY_LINES]
-                        truncated = '\n'.join(truncated_lines)
-                        if len(truncated) > MAX_MEMORY_BYTES:
-                            # Further truncate at last newline before limit
-                            cut_at = truncated.rfind('\n', 0, MAX_MEMORY_BYTES)
-                            if cut_at > 0:
-                                truncated = truncated[:cut_at]
-                            else:
-                                truncated = truncated[:MAX_MEMORY_BYTES]
-                        content = f"{truncated}\n\n> WARNING: MEMORY.md 超过限制（{original_lines} 行 / {original_bytes} 字节），只加载了前 {MAX_MEMORY_LINES} 行 / {MAX_MEMORY_BYTES} 字节。保持索引简洁，每行一个条目。"
-                    memory_content = f"<memory>\n{content}\n</memory>"
+        memory_content = self.build_memory_content(session)
 
         return CompiledContext(
             system_prompt="\n\n".join(prompt_sections),
             recent_messages=recent_messages[-max_messages:],
             memory_content=memory_content,
         )
+
+    def build_memory_content(self, session: Session) -> str:
+        """Build dynamic MEMORY.md user context without touching the system prompt."""
+        work_dir = Path(session.work_dir) if session.work_dir else None
+        if not work_dir or not work_dir.exists():
+            return ""
+        memory_path = work_dir / "MEMORY.md"
+        if not memory_path.exists():
+            return ""
+        raw_content = memory_path.read_text(encoding="utf-8")
+        content = raw_content.strip()
+        if not content:
+            return ""
+        lines = content.split("\n")
+        if len(lines) > MAX_MEMORY_LINES or len(content) > MAX_MEMORY_BYTES:
+            original_lines = len(lines)
+            original_bytes = len(content)
+            truncated_lines = lines[:MAX_MEMORY_LINES]
+            truncated = "\n".join(truncated_lines)
+            if len(truncated) > MAX_MEMORY_BYTES:
+                cut_at = truncated.rfind("\n", 0, MAX_MEMORY_BYTES)
+                if cut_at > 0:
+                    truncated = truncated[:cut_at]
+                else:
+                    truncated = truncated[:MAX_MEMORY_BYTES]
+            content = (
+                f"{truncated}\n\n"
+                f"> WARNING: MEMORY.md 超过限制（{original_lines} 行 / {original_bytes} 字节），"
+                f"只加载了前 {MAX_MEMORY_LINES} 行 / {MAX_MEMORY_BYTES} 字节。保持索引简洁，每行一个条目。"
+            )
+        return f"<memory>\n{content}\n</memory>"
