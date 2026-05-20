@@ -59,6 +59,8 @@
 - **Question Model**：问题解释、硬约束、歧义词、最终输出字段
 - **Candidate Ledger**：主要候选、排除原因、获胜候选为什么胜出
 - **Evidence Ledger**：关键 claim、来源、支持的约束、可信度
+- **Coverage Map**：长文本研究的维度覆盖、空白维度、范围外维度
+- **Report Assumptions**：报告成立所依赖的前提、限制条件、引用质量风险
 - **Update Conditions**：什么新证据会改变结论
 
 短答案 benchmark 或一次性查证通常不需要保存记忆；但如果用户明确把它作为项目方法、失败案例或长期偏好讨论，就保存为 feedback 或 project 记忆。
