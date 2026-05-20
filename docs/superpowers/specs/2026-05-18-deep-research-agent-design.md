@@ -89,7 +89,7 @@
 1. **System prompt** (`agent_system.txt`) — 定义研究方法和阶段
 2. **工具集** — 只暴露研究相关工具，自然引导行为
 3. **`RESEARCHER.md`** — 提供详细工作流指引
-4. **Skill 文件** — 用户载入 deep_research skill 时注入流程模板
+4. **Workspace memory** — 通过 AGENT/SOUL/MEMORY 保持研究纪律和项目偏好
 
 各阶段逻辑如下：
 
@@ -134,7 +134,7 @@
 | **工具** | 新增 `research_plan.py`, `source_evaluate.py`, `knowledge_search.py`, `report_generator.py` | 新 deep research 工具 |
 | **工具** | `retrieval_untils.py`, `untils_case.py` | 保留但默认禁用 |
 | **配置** | `config.yaml` 默认值 | 修改默认工具列表、阶段名称 |
-| **Skills** | `skills/research/SKILL.md` | 扩展为 `deep_research/` 完整工作流 |
+| **Prompts** | `AGENT.md`, `SOUL.md`, `memory_guidance.txt` | 吸收 deep research 工作流与记忆规则 |
 | **文档** | `ARCHITECTURE.md`, `PROJECT.md` | 重写为通用研究 |
 | **CLI** | `cli.py` | 更新 session 阶段默认值 |
 
@@ -369,8 +369,8 @@
 12. 更新 `config.py` 默认值（阶段名、默认工具）
 13. 更新 `core/session.py` 默认阶段
 
-### 阶段 4：Skills 与配置（第 3 周）
-14. 扩展 `skills/deep_research/` 为完整工作流
+### 阶段 4：配置与常驻研究协议（第 3 周）
+14. 将 deep research 工作流吸收到 system prompt、AGENT/SOUL 和 memory guidance
 15. 更新 `config.yaml` — 新工具列表、benchmark 模式
 16. 默认禁用 `law_retrieve`/`case_retrieve`（配置开关）
 

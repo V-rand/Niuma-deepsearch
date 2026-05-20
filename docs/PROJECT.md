@@ -161,21 +161,18 @@ KV cache 保护:
 
 ### 2.8 Skills 系统
 
+Skills 现在是可选的项目/领域扩展机制。默认 deep research 行为不再依赖 `deep_research` skill，而是常驻在 system prompt、AGENT/SOUL 和 memory guidance 中。
+
 ```
 skills/
-├── legal/
-│   ├── DESCRIPTION.md
-│   ├── legal_case/SKILL.md        → name:legal-case, layer:domain
-│   └── interest_calculation/SKILL.md
-└── research/
-    ├── DESCRIPTION.md
-    └── deep_research/SKILL.md     → name:deep-research, layer:system
+└── <domain_or_project>/
+    └── <workflow>/SKILL.md        → optional workflow extension
 
 SKILL.md 结构:
   ---
-  name: legal-case
+  name: workflow-name
   layer: domain
-  allowed-tools: [law_retrieve, case_retrieve, ...]
+  allowed-tools: [...]
   profile:
     folders: [uploads, research, drafts, ...]
     files:

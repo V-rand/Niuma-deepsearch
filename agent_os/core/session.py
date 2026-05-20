@@ -451,15 +451,32 @@ class SessionManager:
                     pass
         memory_path = work_dir / "MEMORY.md"
         if not memory_path.exists():
-            tree = ["# 研究备忘", ""]
-            tree.append("## 当前进展")
-            tree.append("")
-            tree.append("## 关键发现")
-            tree.append("")
-            tree.append("## 待核实")
-            tree.append("")
-            tree.append("## 下一步")
-            tree.append("")
+            tree = [
+                "# 研究记忆索引",
+                "",
+                "MEMORY.md 是索引，不是全文笔记。详细研究状态写入 `research/memory/*.md`，这里保留短 hook。",
+                "",
+                "## Question Model",
+                "",
+                "- 当前问题解释、硬约束、歧义词、最终输出字段。",
+                "",
+                "## Candidate Ledger",
+                "",
+                "- 候选、排除原因、获胜候选为什么胜出。",
+                "",
+                "## Evidence Ledger",
+                "",
+                "- 关键 claim、来源、支持的约束、可信度。",
+                "",
+                "## Update Conditions",
+                "",
+                "- 什么新证据会改变当前结论。",
+                "",
+                "## 用户与项目偏好",
+                "",
+                "- 长期偏好、工作方法反馈、项目决策。",
+                "",
+            ]
             try:
                 memory_path.write_text("\n".join(tree), encoding="utf-8")
             except (OSError, IOError):
