@@ -12,7 +12,7 @@ async def test_upload_parse_rejects_uploads_path_traversal(tmp_path, monkeypatch
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="upload-security", workspace_profile="legal_case")
+        session = await osys.create_session(name="upload-security")
         set_session_context(work_dir=session.work_dir, session_id=session.id)
         upload_parse = osys.tool_registry.get_entry("upload_parse")
 
@@ -36,7 +36,7 @@ async def test_auto_parse_uploads_uses_current_parser_implementation(tmp_path, m
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="auto-parse", workspace_profile="legal_case")
+        session = await osys.create_session(name="auto-parse")
         upload_path = Path(session.work_dir) / "uploads" / "note.txt"
         upload_path.write_text("自动解析材料正文", encoding="utf-8")
 

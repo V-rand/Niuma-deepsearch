@@ -111,21 +111,6 @@ class SkillLoader:
                     return skill
         return None
 
-    def get_profile_config(self, profile_name: str) -> dict[str, Any]:
-        """Get workspace profile config (folders + files) from a skill."""
-        skill = self.resolve_skill(profile_name)
-        if skill and skill.get("profile"):
-            return dict(skill["profile"])
-        return {"folders": ["uploads", "research", "drafts", "raw_search", "logs"],
-                "files": {"workspace.md": "# {{session_name}}\n\n## 目标\n\n"}}
-
-    def get_profile_prompt(self, profile_name: str) -> str:
-        """Get prompt_append for a profile."""
-        skill = self.resolve_skill(profile_name)
-        if skill:
-            return str(skill.get("prompt_append", ""))
-        return ""
-    
     def list_skills(self) -> List[str]:
         """列出所有 Skills"""
         return list(self._skills.keys())

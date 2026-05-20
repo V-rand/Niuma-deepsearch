@@ -1,0 +1,12 @@
+搜索 arXiv 上的学术论文。arXiv 覆盖计算机科学、数学、物理学等领域的最新预印本。
+
+当需要搜索学术论文、会议文章（ICML、NeurIPS、ICLR、CVPR 等会议论文）、预印本时，优先使用此工具而非 web_search。比通用搜索引擎更精准地返回论文标题、作者、摘要、发布日期等信息。
+
+参数：
+- query: 搜索查询（支持标题关键词、作者名、会议名等）
+- max_results: 最大返回数（默认5）
+
+返回：
+- query: 原始查询
+- results: [{title, url, content（摘要）, published（发布日期）, authors（作者列表）}]
+- count: 结果数

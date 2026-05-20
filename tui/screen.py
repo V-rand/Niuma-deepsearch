@@ -133,7 +133,7 @@ class ChatScreen(Screen):
         elif sessions:
             self.current_session_id = sessions[0]["id"]
         else:
-            await self._create_session("法律工作区 1", quiet=True)
+            await self._create_session("研究空间 1", quiet=True)
             return
         self._save_current_session()
         await self._refresh_session_context()
@@ -145,8 +145,8 @@ class ChatScreen(Screen):
     async def _create_session(self, name: str, *, quiet: bool = False) -> None:
         if not name:
             sessions = await self.agent.list_sessions()
-            name = f"法律工作区 {len(sessions) + 1}"
-        session = await self.agent.create_session(name=name, workspace_profile="legal_case")
+            name = f"研究空间 {len(sessions) + 1}"
+        session = await self.agent.create_session(name=name)
         self.current_session_id = session.id
         self._save_current_session()
         await self._refresh_session_context()

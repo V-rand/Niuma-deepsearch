@@ -28,21 +28,6 @@ from ..prompts import result_filter
 # result set is genuinely large enough to blow up context.
 _PRUNE_CHAR_THRESHOLD = int(os.getenv("AGENT_OS_PRUNE_CHAR_THRESHOLD", "5000"))
 
-# Content truncation for individual result items in the filter prompt.
-# Set high enough for full law articles (typically 2k-8k chars).
-_ITEM_CONTENT_MAX = int(os.getenv("AGENT_OS_ITEM_CONTENT_MAX", "12000"))
-_ITEM_CONTENT_HEAD = int(os.getenv("AGENT_OS_ITEM_CONTENT_HEAD", "8000"))
-_ITEM_CONTENT_TAIL = int(os.getenv("AGENT_OS_ITEM_CONTENT_TAIL", "4000"))
-
-
-def _truncate_item_content(value: str, max_chars: int = _ITEM_CONTENT_MAX) -> str:
-    """Truncate a long string value while preserving head and tail."""
-    if len(value) <= max_chars:
-        return value
-    head = _ITEM_CONTENT_HEAD
-    tail = min(_ITEM_CONTENT_TAIL, max_chars - head - 20)
-    return value[:head] + "\n...[truncated]...\n" + value[-tail:]
-
 
 class ResultFilterAgent:
     """Compresses long retrieval results into citation-grounded summaries."""
@@ -71,10 +56,12 @@ class ResultFilterAgent:
         query: str,
         results: list[dict[str, Any]],
         user_query: str = "",
+        agent_context: str = "",
     ) -> dict[str, Any]:
         """Filter and compress retrieval results.
 
         Returns a compact dict suitable for injection into the main conversation.
+        agent_context: session research goal / recent conversation context.
         """
         if not results:
             return {
@@ -84,6 +71,8 @@ class ResultFilterAgent:
                 "filtered_results": [],
                 "coverage_note": "无结果",
             }
+
+        system_prompt = result_filter.replace("{{agent_context}}", agent_context or "(无额外上下文)")
 
         user_prompt = self._build_user_prompt(
             tool_name=tool_name,
@@ -96,7 +85,7 @@ class ResultFilterAgent:
             self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": result_filter},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
                 temperature=0.1,
@@ -157,9 +146,7 @@ class ResultFilterAgent:
             lines.append(f"### 结果 {i}")
             for key, value in item.items():
                 if value is not None and value != "":
-                    val_str = str(value)
-                    val_str = _truncate_item_content(val_str, _ITEM_CONTENT_MAX)
-                    lines.append(f"- {key}: {val_str}")
+                    lines.append(f"- {key}: {value}")
             lines.append("")
 
         lines.append("--- 结束 ---")
@@ -192,21 +179,4 @@ class ResultFilterAgent:
             except json.JSONDecodeError:
                 pass
 
-        return {
-            "tool_name": "unknown",
-            "query": "",
-            "total_results": 0,
-            "filtered_results": [
-                {
-                    "source": "[过滤解析失败 — 不可引用]",
-                    "quote": '> "[无有效引用]"',
-                    "summary": (
-                        "⚠️ 过滤 Agent 返回的 JSON 解析失败，以下为原始数据片段，"
-                        "请勿将其作为过滤结果引用，应回退到完整原始结果。"
-                        f" 原始片段: {raw[:500]}"
-                    ),
-                    "relevance": "low",
-                }
-            ],
-            "coverage_note": "过滤 Agent JSON 解析失败 — 建议回退到完整原始数据",
-        }
+        raise ValueError(f"Failed to parse JSON from filter output: {raw[:500]}")

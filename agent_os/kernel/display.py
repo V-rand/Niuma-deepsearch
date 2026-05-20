@@ -513,7 +513,7 @@ def print_compression_event(old_session_id: str, new_session_id: str, tokens_bef
 # Welcome / Status panels
 # ---------------------------------------------------------------------------
 
-def print_welcome(title: str = "Agent OS - 您的法律智能助手") -> None:
+def print_welcome(title: str = "AgentOS — 通用深度研究助手") -> None:
     """Rich welcome banner."""
     console.print()
     console.print(Align.center(

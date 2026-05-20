@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`agent_os4law/` is the active codebase. Core runtime code lives in `agent_os/`:
+`agent_os/` is the core runtime code:
 
 | Module | Path | Responsibility |
 |--------|------|---------------|
@@ -16,7 +16,7 @@
 Documentation: `docs/` (architecture, REQUIRE.md).
 
 ## Build, Test, and Development Commands
-Use `uv` only. Run from `agent_os4law/`, not workspace root.
+Use `uv` only. Run from workspace root.
 
 ```bash
 # Run
@@ -30,13 +30,13 @@ uv run python -m compileall agent_os cli.py
 ## Key Architecture Rules
 
 ### Kernel is Generic
-This project builds a **general AgentOS** for legal work, not a hard-coded workflow engine. Keep business flow out of the kernel:
+This project builds a **general AgentOS** for deep research, not a hard-coded workflow engine. Keep business flow out of the kernel:
 - **Kernel**: sessions, ReAct loop, tool execution, context management, events, interrupts
 - **Skills**: zero-code workflow definitions (pure Markdown)
 - **Tools**: executable capabilities (Python, including auto-discovered plugins)
 
-### Session = Case Workspace
-Each session is a long-lived case workspace:
+### Session = Research Workspace
+Each session is a long-lived research workspace:
 - Files under `data/sessions/{id}_{name}/` with `uploads/`, `drafts/`, `research/`, `raw_search/`
 - Structured state in SQLite (messages, artifacts, todos, reminders)
 - Derived artifacts preserve source lineage pointing back to `uploads/` originals
@@ -61,7 +61,7 @@ No formal pytest suite; validate with pipe-mode inputs and manual chat sessions.
 - Tool calling
 - Reminder firing
 - Artifact persistence and retrieval
-- External law/case/web integrations
+- External web/search integrations
 
 ## Common Pitfalls
 - **Module-level defs between class methods** silently close the class in Python — always check indentation when adding standalone functions

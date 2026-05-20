@@ -11,7 +11,7 @@ async def test_workspace_search_uses_shared_work_dir_after_fork(tmp_path, monkey
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        parent = await osys.create_session(name="parent", workspace_profile="legal_case")
+        parent = await osys.create_session(name="parent")
         await osys.write_artifact(
             parent.id,
             path="research/parent.md",
@@ -39,7 +39,7 @@ async def test_artifact_access_uses_shared_work_dir_after_fork(tmp_path, monkeyp
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        parent = await osys.create_session(name="parent", workspace_profile="legal_case")
+        parent = await osys.create_session(name="parent")
         await osys.write_artifact(
             parent.id,
             path="research/parent.md",
@@ -70,7 +70,7 @@ async def test_workspace_search_handles_chinese_multi_term_queries(tmp_path, mon
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="search", workspace_profile="legal_case")
+        session = await osys.create_session(name="search")
         await osys.write_artifact(
             session.id,
             path="research/search.md",
@@ -95,7 +95,7 @@ async def test_workspace_search_filters_fts_false_positive_chunks(tmp_path, monk
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="search", workspace_profile="legal_case")
+        session = await osys.create_session(name="search")
         await osys.write_artifact(
             session.id,
             path="research/benchmark.md",
@@ -121,7 +121,7 @@ async def test_remove_artifact_clears_shared_work_dir_artifact_rows(tmp_path, mo
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        parent = await osys.create_session(name="parent", workspace_profile="legal_case")
+        parent = await osys.create_session(name="parent")
         await osys.write_artifact(
             parent.id,
             path="research/shared.md",

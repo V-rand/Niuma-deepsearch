@@ -1,5 +1,5 @@
 """
-Agent OS - 法律智能体操作系统
+Agent OS — 通用深度研究智能体操作系统
 
 核心概念：
 - AgentLoop: ReAct 核心循环

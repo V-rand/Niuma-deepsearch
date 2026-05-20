@@ -11,7 +11,7 @@
 
 结果自动归档到 raw_search/web_search/。
 
-优先级：先 workspace_search（已有材料）→ 先 law/case_retrieve（法规案例）→ 最后 web_search
+优先级：先 workspace_search（已有材料）→ 再 web_search（外部网络）
 
 并行提示：
 - 多个独立搜索可以同时发起（同一轮多次 web_search），系统会并行执行

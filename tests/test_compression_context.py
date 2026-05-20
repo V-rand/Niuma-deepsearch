@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 
@@ -33,7 +34,8 @@ async def test_compression_does_not_duplicate_current_user_message(tmp_path, mon
     osys = AgentOS(data_dir=str(tmp_path))
     captured_messages = []
 
-    async def fake_summary(content):
+    async def fake_summary(content, *, previous_summary=""):
+        osys.agent_loop._CONTEXT_TOKEN_THRESHOLD = 999_999
         return "<chronology><event>summary</event></chronology>"
 
     async def fake_request(request_kwargs, effective_timeout, session_id, iteration):
@@ -41,7 +43,7 @@ async def test_compression_does_not_duplicate_current_user_message(tmp_path, mon
         return _FakeStream(), []
 
     try:
-        session = await osys.create_session(name="compression", workspace_profile="legal_case")
+        session = await osys.create_session(name="compression")
         for index in range(12):
             await osys.sessions.add_message(session.id, "user", f"old user {index}", kind="chat")
             await osys.sessions.add_message(session.id, "assistant", f"old assistant {index}", kind="chat")
@@ -54,7 +56,7 @@ async def test_compression_does_not_duplicate_current_user_message(tmp_path, mon
 
         current_message = "CURRENT_COMPRESSION_MESSAGE"
         events = []
-        async for event in osys.chat(session.id, current_message, max_iterations=1):
+        async for event in osys.chat(session.id, current_message, max_iterations=2):
             events.append(event)
 
         assert any(event.get("type") == "session.compressed" for event in events)
@@ -63,5 +65,11 @@ async def test_compression_does_not_duplicate_current_user_message(tmp_path, mon
             for message in captured_messages
             if message.get("role") == "user" and message.get("content") == current_message
         ] == [current_message]
+        state_path = Path(session.work_dir) / "compression_state.md"
+        assert state_path.exists()
+        state_text = state_path.read_text(encoding="utf-8")
+        assert "compression_version: 2" in state_text
+        assert f"parent_session_id: {session.id}" in state_text
+        assert "<chronology><event>summary</event></chronology>" in state_text
     finally:
         await osys.stop()

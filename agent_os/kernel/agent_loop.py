@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from time import perf_counter
 from pathlib import Path
 from typing import Any, AsyncGenerator
@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 
 # Tools whose results may be large (>10K chars). Their output is compressed by
 # ResultFilterAgent before being injected into the model context.
-_FILTERABLE_TOOLS = frozenset({
-    "law_retrieve", "case_retrieve", "web_read", "web_search", "workspace_search",
+_DEFAULT_FILTERABLE_TOOLS = frozenset({
+    "workspace_search",
 })
 
 # Tools that carry a path/pattern argument — conditional skills are checked
@@ -88,6 +88,7 @@ class AgentLoop:
         self._reasoning_effort = settings.reasoning_effort
         self._provider = settings.provider
         self._enable_explicit_cache = settings.enable_explicit_cache
+        self._filter_tools: frozenset[str] = frozenset(settings.filter_tools) if settings.filter_tools is not None else _DEFAULT_FILTERABLE_TOOLS
         # Frozen at AgentLoop start to keep KV cache prefix stable across context
         # rebuilds. The timestamp is injected as a user message, and while it changes
         # position relative to history, it sits after the system prompt prefix — so
@@ -273,6 +274,7 @@ class AgentLoop:
                 state = _LoopState(messages=messages)
                 while iteration < effective_max_iterations:
                     iteration += 1
+                    state.transition = None
 
                     # Check interrupt signal
                     interrupt_event = self._interrupt_events.get(session_id)
@@ -349,7 +351,7 @@ class AgentLoop:
                     usage_dict = parsed["usage_dict"]
                     latency_ms = parsed["latency_ms"]
 
-                    yield self._format_model_completed_event(usage_dict, latency_ms, iteration)
+                    yield self._format_model_completed_event(usage_dict, latency_ms, iteration, reasoning_text)
 
                     # Decide: final answer or tool calls
                     if not tool_calls:
@@ -603,8 +605,9 @@ class AgentLoop:
 
     def _format_model_completed_event(
         self, usage_dict: dict[str, Any], latency_ms: float, iteration: int,
+        reasoning_text: str = "",
     ) -> dict[str, Any]:
-        """Build the model.completed activity event with KV cache stats."""
+        """Build the model.completed activity event with KV cache stats and full reasoning text."""
         usage_text = ""
         if usage_dict:
             pt = usage_dict.get("prompt_tokens", 0) or 0
@@ -618,7 +621,7 @@ class AgentLoop:
             "type": "activity",
             "phase": "model.completed",
             "detail": f"模型响应完成 | 耗时: {latency_ms / 1000:.1f}s{usage_text}",
-            "payload": {"latency_ms": latency_ms, "usage": usage_dict, "iteration": iteration},
+            "payload": {"latency_ms": latency_ms, "usage": usage_dict, "iteration": iteration, "reasoning_text": reasoning_text},
         }
 
     async def _persist_assistant_tool_call(
@@ -672,6 +675,7 @@ class AgentLoop:
         """
         reasoning_parts, content_parts, tool_calls_raw, usage_dict = [], [], {}, {}
         tool_arg_progress: dict[int, int] = {}
+        thinking_buffer = ""
         async for chunk in response:
             usage = getattr(chunk, "usage", None)
             if usage is not None:
@@ -690,12 +694,22 @@ class AgentLoop:
             rc = getattr(delta, "reasoning_content", None)
             if rc:
                 reasoning_parts.append(rc)
-                yield {"type": "thinking_stream", "content": rc}
+                thinking_buffer += rc
+                lb = thinking_buffer[-1] if thinking_buffer else ""
+                if lb in "\n。！？":
+                    yield {"type": "thinking_stream", "content": thinking_buffer}
+                    thinking_buffer = ""
             ct = delta.content
             if ct:
+                if thinking_buffer:
+                    yield {"type": "thinking_stream", "content": thinking_buffer}
+                    thinking_buffer = ""
                 content_parts.append(ct)
                 yield {"type": "content_stream", "content": ct}
             for tc_delta in delta.tool_calls or []:
+                if thinking_buffer:
+                    yield {"type": "thinking_stream", "content": thinking_buffer}
+                    thinking_buffer = ""
                 idx = tc_delta.index
                 if idx not in tool_calls_raw:
                     tool_calls_raw[idx] = {"id": "", "name": "", "arguments": ""}
@@ -718,6 +732,8 @@ class AgentLoop:
                                 "payload": {"tool": name, "argument_chars": arg_len, "iteration": iteration},
                             }
 
+        if thinking_buffer:
+            yield {"type": "thinking_stream", "content": thinking_buffer}
         latency_ms = round((perf_counter() - request_started) * 1000, 2)
         output_text = "".join(content_parts)
         reasoning_text = "".join(reasoning_parts)
@@ -860,17 +876,16 @@ class AgentLoop:
                     call_arguments = json.loads(call_arguments)
                 except json.JSONDecodeError:
                     pass
-            tool_content = await self._resolve_tool_content_for_messages(tool_name=tc["name"], result=result, user_message=message)
+            tool_content = await self._resolve_tool_content_for_messages(tool_name=tc["name"], result=result, user_message=message, session_id=session_id)
             tool_content = self._append_archive_reminder(tool_content, result)
             tool_content = self._append_context_file_update_reminder(tool_content, tc["name"], call_arguments, result)
             await self._save_filtered_tool_result(tool_content, tc["name"], session_id)
             messages.append({"role": "tool", "tool_call_id": tc["id"], "content": tool_content})
             await self.sessions.add_message(session_id, "tool", tool_content, kind="tool", metadata={"tool_call_id": tc["id"], "tool_name": tc["name"]})
-            latency_text = f"{(latency_ms or 0) / 1000:.1f}s" if latency_ms is not None else "未知"
             yield {
                 "type": "activity",
                 "phase": "tool.completed",
-                "detail": f"工具 {tc['name']} 执行完成 | 并发耗时: {latency_text}",
+                "detail": f"工具 {tc['name']} 执行完成 | 并发耗时: {latency_ms or 0:.1f}s",
                 "payload": {"tool": tc["name"], "latency_ms": latency_ms, "success": result.success, "parallel": True},
             }
             result_dict = result.to_dict()
@@ -885,43 +900,6 @@ class AgentLoop:
                     "phase": "artifact.saved",
                     "detail": f"检索结果已入库: {archived_path}",
                     "payload": {"tool": tc["name"], "path": archived_path},
-                }
-            yield {"type": "tool_result", "result": result_dict}
-
-    async def _execute_tools_sequential(
-        self, tool_calls: list[dict], session_id: str,
-        iteration: int, message: str, messages: list[dict],
-    ) -> AsyncGenerator[dict[str, Any], None]:
-        for tool_call in tool_calls:
-            call_arguments = tool_call["arguments"]
-            if isinstance(call_arguments, str):
-                try:
-                    call_arguments = json.loads(call_arguments)
-                except json.JSONDecodeError:
-                    pass
-            yield {"type": "tool_call", "name": tool_call["name"], "arguments": call_arguments, "summary": self._summarize_tool_call(tool_call["name"], call_arguments if isinstance(call_arguments, dict) else {})}
-            yield {"type": "activity", "phase": "tool.executing", "detail": f"正在调用工具: {tool_call['name']}"}
-            started = perf_counter()
-            result = await self._execute_tool(tool_call, session_id, iteration=iteration, tool_call_id=tool_call.get("id"))
-            latency_s = round((perf_counter() - started), 2)
-            tool_content = await self._resolve_tool_content_for_messages(tool_name=tool_call["name"], result=result, user_message=message)
-            tool_content = self._append_archive_reminder(tool_content, result)
-            tool_content = self._append_context_file_update_reminder(tool_content, tool_call["name"], call_arguments, result)
-            await self._save_filtered_tool_result(tool_content, tool_call["name"], session_id)
-            messages.append({"role": "tool", "tool_call_id": tool_call["id"], "content": tool_content})
-            await self.sessions.add_message(session_id, "tool", tool_content, kind="tool", metadata={"tool_call_id": tool_call["id"], "tool_name": tool_call["name"]})
-            yield {"type": "activity", "phase": "tool.completed", "detail": f"工具 {tool_call['name']} 执行完成 | 耗时: {latency_s:.1f}s", "payload": {"tool": tool_call["name"], "latency_ms": round(latency_s * 1000), "success": result.success}}
-            result_dict = result.to_dict()
-            result_dict["latency_ms"] = round(latency_s * 1000)
-            result_dict["tool"] = tool_call["name"]
-            result_dict["summary"] = self._summarize_tool_result(tool_call["name"], result_dict)
-            archived_path = ((result.data or {}) if result.success else {}).get("archived_path")
-            if archived_path:
-                yield {
-                    "type": "activity",
-                    "phase": "artifact.saved",
-                    "detail": f"检索结果已入库: {archived_path}",
-                    "payload": {"tool": tool_call["name"], "path": archived_path},
                 }
             yield {"type": "tool_result", "result": result_dict}
 
@@ -1260,6 +1238,33 @@ class AgentLoop:
         self._session_locks.pop(session_id, None)
         return new_session.id, summary_xml
 
+    def _write_compression_state(
+        self,
+        work_dir: str,
+        compression_version: int,
+        summary_xml: str,
+        *,
+        parent_session_id: str,
+    ) -> None:
+        """Persist the latest compression handoff for future compact summaries."""
+        state_path = Path(work_dir) / "compression_state.md"
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        state_path.write_text(
+            "\n".join(
+                [
+                    "---",
+                    f"compression_version: {compression_version}",
+                    f"parent_session_id: {parent_session_id}",
+                    f"updated_at: {updated_at}",
+                    "---",
+                    summary_xml.strip(),
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
     async def _build_post_compact_injections(
         self, parent_session_id: str, tail_messages: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
@@ -1464,11 +1469,17 @@ class AgentLoop:
     # Tool result resolution
     # ------------------------------------------------------------------
 
-    async def _resolve_tool_content_for_messages(self, *, tool_name: str, result: ToolResult, user_message: str) -> str:
+    async def _resolve_tool_content_for_messages(self, *, tool_name: str, result: ToolResult, user_message: str, session_id: str = "") -> str:
         from .helpers import resolve_tool_content_for_messages
+        agent_context = ""
+        if session_id:
+            session = await self.sessions.get(session_id)
+            if session:
+                agent_context = session.name or ""
         return await resolve_tool_content_for_messages(
             tool_name=tool_name, result=result, user_message=user_message,
-            result_filter=self.result_filter, filterable=tool_name in _FILTERABLE_TOOLS,
+            result_filter=self.result_filter, filterable=tool_name in self._filter_tools,
+            agent_context=agent_context,
         )
 
     @staticmethod
@@ -1705,6 +1716,7 @@ class AgentLoop:
             child_interrupt=child_interrupt,
             sub_agent_work_dir=work_dir, reasoning_effort=self._reasoning_effort,
             pending_messages=self._pending_messages,
+            filter_tools=self._filter_tools,
         )
         timeout = min(sub_agent.max_iterations * self.request_timeout_seconds * 2, 600)
         result = await asyncio.wait_for(sub_agent.run(task_description), timeout=timeout)

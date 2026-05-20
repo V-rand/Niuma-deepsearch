@@ -1,5 +1,5 @@
 # =============================================================================
-# AgentOS4Law 运行配置
+# AgentOS 运行配置
 # -----------------------------------------------------------------------------
 # 这是唯一的运行参数配置文件。修改后重启即可生效，无需改代码。
 # API 密钥（OPENAI_API_KEY 等）请在 .env 文件中填写，不要写在这里。
@@ -33,11 +33,11 @@ enable_explicit_cache: false       # DashScope 显式缓存（仅 deepseek-v3.2/
 # 创建 session 时的默认工作区结构。skill 不带 profile 预设，统一由此配置。
 workspace:
   folders:                         # 预创建的文件夹
-    - uploads                      #   用户原始材料（只读）
-    - research                     #   检索笔记与研究报告
-    - drafts                       #   文书草稿
-    - raw_search                   #   外部检索原始归档
-    - logs                         #   运行日志
+    - uploads                      # 用户原始材料（只读）
+    - research                     # 研究笔记与报告
+    - drafts                       # 草稿文档
+    - raw_search                   # 外部检索原始归档
+    - logs                         # 运行日志
   files:                           # 预创建的文件（支持 {{session_name}} 占位符）
     workspace.md: |
       # {{session_name}}
@@ -120,5 +120,5 @@ scheduler_interval_seconds: 30    # 定时提醒检查间隔（秒）
 # 外部集成密钥 — 请在 .env 中配置，不要写在这里
 #  OPENAI_API_KEY / DEEPSEEK_API_KEY / TAVILY_API_KEY / JINA_API_KEY
 #  FIRECRAWL_API_KEY / SERPER_API_KEY / DELI_APP_ID / DELI_APP_SECRET
-#  FEISHU_WEBHOOK / FEISHU_SECRET
+#  FEISHU_WEBHOOK / FEISHU_SECRET / MINERU_API_TOKEN
 # ---------------------------------------------------------------------------

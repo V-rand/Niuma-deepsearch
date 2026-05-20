@@ -9,6 +9,7 @@ __pycache__/
 .ruff_cache/
 
 data/
+outputs/
 token_cache.json
 *.db
 *.sqlite3

@@ -72,7 +72,7 @@ async def test_agent_loop_process_emits_error_event_for_content_filter(tmp_path,
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="provider-error", workspace_profile="legal_case")
+        session = await osys.create_session(name="provider-error")
 
         async def _raise_content_filter(*args, **kwargs):
             raise _make_content_filter_error()
@@ -132,7 +132,7 @@ async def test_quarantine_context_skips_prior_chat_history(tmp_path, monkeypatch
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="quarantine", workspace_profile="legal_case")
+        session = await osys.create_session(name="quarantine")
         await osys.sessions.add_message(session.id, "user", "历史敏感词", kind="chat")
         await osys.sessions.add_message(session.id, "assistant", "历史回复", kind="chat")
         await osys.sessions.add_message(session.id, "user", "系统提醒", kind="system")
@@ -159,7 +159,7 @@ async def test_quarantine_context_skips_prior_tool_history(tmp_path, monkeypatch
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="quarantine-tool", workspace_profile="legal_case")
+        session = await osys.create_session(name="quarantine-tool")
         await osys.sessions.add_message(
             session.id,
             "tool",
@@ -190,7 +190,7 @@ async def test_stream_time_content_filter_recovers_session(tmp_path, monkeypatch
 
     osys = AgentOS(data_dir=str(tmp_path))
     try:
-        session = await osys.create_session(name="stream-filter", workspace_profile="legal_case")
+        session = await osys.create_session(name="stream-filter")
 
         async def _stream_then_filter(*args, **kwargs):
             return _ContentThenFilterStream(), []

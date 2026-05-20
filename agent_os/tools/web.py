@@ -5,6 +5,7 @@ Web reading tool with provider fallback (Jina → Firecrawl → Trafilatura).
 from __future__ import annotations
 
 import asyncio
+from asyncio import FIRST_COMPLETED
 import os
 from pathlib import Path
 from typing import Any
@@ -54,17 +55,41 @@ async def handle_web_read(url, **kw) -> ToolResult:
         if fallback:
             return fallback
 
-    for provider in _read_provider_order():
-        if provider == "jina":
-            result = await _try_jina(url)
-        elif provider == "firecrawl":
-            result = await _try_firecrawl(url)
-        elif provider == "trafilatura":
-            result = await _try_trafilatura(url)
-        else:
-            continue
-        if result["status"] == "success":
-            return ToolResult.ok(data={"url": url, "content": str(result["content"]).strip(), "parser": str(result.get("parser", provider))})
+    async def _try_all() -> dict:
+        tasks = {}
+        for provider in _read_provider_order():
+            if provider == "jina":
+                tasks["jina"] = asyncio.create_task(_try_jina(url))
+            elif provider == "firecrawl":
+                tasks["firecrawl"] = asyncio.create_task(_try_firecrawl(url))
+            elif provider == "trafilatura":
+                tasks["trafilatura"] = asyncio.create_task(_try_trafilatura(url))
+        if not tasks:
+            return {"status": "error", "detail": "no providers configured"}
+        while tasks:
+            done, _ = await asyncio.wait(tasks.values(), return_when=FIRST_COMPLETED, timeout=_timeout())
+            if not done:
+                for f in tasks.values():
+                    f.cancel()
+                break
+            for fut in done:
+                name = next((n for n, f in tasks.items() if f is fut), None)
+                if name is None:
+                    continue
+                try:
+                    result = fut.result()
+                except Exception as exc:
+                    tasks.pop(name, None)
+                    continue
+                if result["status"] == "success":
+                    for f in tasks.values():
+                        f.cancel()
+                    return result
+                tasks.pop(name, None)
+        return {"status": "error", "detail": "all providers failed"}
+    result = await _try_all()
+    if result["status"] == "success":
+        return ToolResult.ok(data={"url": url, "content": str(result["content"]).strip(), "parser": str(result.get("parser", ""))})
 
     msg = "No reader provider returned usable content"
     return ToolResult.fail(msg)

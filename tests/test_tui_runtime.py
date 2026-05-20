@@ -175,7 +175,7 @@ async def test_chat_screen_consumes_fake_agent_stream():
         async def list_sessions(self):
             return [{"id": "s1", "name": "测试工作区", "stage": "intake", "status": "active", "created_at": "1"}]
 
-        async def create_session(self, name="", workspace_profile=""):
+        async def create_session(self, name=""):
             self.session.name = name
             return self.session
 
@@ -243,7 +243,7 @@ async def test_chat_screen_uses_slash_commands_instead_of_keybindings():
         async def list_sessions(self):
             return [{"id": "s1", "name": "测试工作区", "stage": "intake", "status": "active", "created_at": "1"}]
 
-        async def create_session(self, name="", workspace_profile=""):
+        async def create_session(self, name=""):
             return self.session
 
         async def get_session(self, session_id):

@@ -104,6 +104,8 @@ def _is_content_filter_error(*, code: Any, message: str, body: Any) -> bool:
         "data_inspection_failed",
         "inappropriate content",
         "content filter",
+        "content exists risk",
+        "content_filter",
         "敏感内容",
         "内容审查",
     ))
@@ -378,10 +380,12 @@ async def resolve_tool_content_for_messages(
     user_message: str,
     result_filter: Any,
     filterable: bool,
+    agent_context: str = "",
 ) -> str:
     """Shared tool result filtering for AgentLoop and SubAgent.
 
     Below threshold: keep full JSON. Above threshold: LLM citation-grounded filter.
+    agent_context: session research objective / recent context for relevance.
     """
     from .result_filter import _PRUNE_CHAR_THRESHOLD
 
@@ -398,16 +402,21 @@ async def resolve_tool_content_for_messages(
         return json.dumps(result.to_dict(), ensure_ascii=False)
 
     query = str(data.get("query", "")) or str(data.get("url", ""))
+    archived_path = data.get("archived_path", "")
     results = data.get("results")
     if not isinstance(results, list) or not results:
         content = data.get("content", "")
         if isinstance(content, str) and len(content) > _PRUNE_CHAR_THRESHOLD:
             try:
+                item = {"content": content, "url": data.get("url", "")}
+                if archived_path:
+                    item["archived_path"] = archived_path
                 filtered = await result_filter.filter(
                     tool_name=tool_name,
                     query=query or "web_read",
-                    results=[{"content": content, "url": data.get("url", "")}],
+                    results=[item],
                     user_query=user_message,
+                    agent_context=agent_context,
                 )
                 formatted = result_filter.format_for_messages(filtered)
                 return json.dumps(
@@ -419,11 +428,14 @@ async def resolve_tool_content_for_messages(
         return json.dumps(result.to_dict(), ensure_ascii=False)
 
     try:
+        if archived_path:
+            results = [{**r, "archived_path": archived_path} if isinstance(r, dict) and "archived_path" not in r else r for r in results]
         filtered = await result_filter.filter(
             tool_name=tool_name,
             query=query,
             results=results,
             user_query=user_message,
+            agent_context=agent_context,
         )
         formatted = result_filter.format_for_messages(filtered)
         return json.dumps(

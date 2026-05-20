@@ -194,17 +194,13 @@ class AgentOS:
         name: str = "",
         description: str = "",
         stage: str = "intake",
-        workspace_profile: str = "",
         initial_files: dict[str, str] | None = None,
     ) -> Session:
-        profile_config = self.skill_loader.get_profile_config(workspace_profile) if workspace_profile else None
         session = await self.sessions.create(
             name=name,
             description=description,
             stage=stage,
-            workspace_profile=workspace_profile,
             initial_files=initial_files,
-            profile_config=profile_config,
         )
         await self.workspace_memory.upsert_artifact(
             session.id,

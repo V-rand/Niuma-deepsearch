@@ -63,12 +63,6 @@ class ContextCompiler:
                     if content:
                         prompt_sections.append(f"<{tag}>\n{content}\n</{tag}>")
 
-        profile_name = (session.metadata or {}).get("workspace_profile", "")
-        if self.skill_loader and profile_name:
-            profile_prompt = self.skill_loader.get_profile_prompt(profile_name)
-            if profile_prompt:
-                prompt_sections.append(f"<profile>\n{profile_prompt}\n</profile>")
-
         # Static memory guidance (KV cache prefix - stable)
         if memory_guidance:
             prompt_sections.append(memory_guidance)

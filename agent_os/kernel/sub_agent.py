@@ -24,7 +24,7 @@ from .result_filter import ResultFilterAgent
 # Tools whose output is compressed through ResultFilterAgent before entering sub-agent context.
 # These are search/retrieval tools that can return 50K+ character results.
 _FILTERABLE_TOOLS = frozenset({
-    "law_retrieve", "case_retrieve", "web_read", "web_search", "workspace_search",
+    "workspace_search",
 })
 
 
@@ -50,6 +50,7 @@ class SubAgent:
         sub_agent_work_dir: str = "",
         pending_messages: dict[str, list[str]] | None = None,
         child_interrupt=None,
+        filter_tools: frozenset[str] | None = None,
     ):
         self.client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=request_timeout_seconds, max_retries=0)
         self.model = model
@@ -69,6 +70,7 @@ class SubAgent:
         self._child_interrupt = child_interrupt
         self._provider = "deepseek" if "deepseek" in str(base_url) else "dashscope"
         self.result_filter = ResultFilterAgent(api_key=api_key, base_url=base_url, model=model, timeout_seconds=request_timeout_seconds)
+        self._filter_tools: frozenset[str] = filter_tools if filter_tools is not None else _FILTERABLE_TOOLS
         self._session_id: str = ""
         self._status_path = Path(sub_agent_work_dir) / "raw_search" / "subagents" / sub_agent_id / "_status.jsonl" if sub_agent_work_dir else None
         self._started_at = datetime.now().isoformat(timespec="seconds")
@@ -131,7 +133,6 @@ class SubAgent:
         # Clean up the auto-created dir — sub-agent shares parent's work_dir
         created_dir = Path(child.work_dir)
         child.work_dir = session.work_dir
-        child.metadata["workspace_profile"] = ""
         await self.sessions.update(child)
         try:
             if created_dir.exists() and created_dir != Path(session.work_dir):
@@ -306,7 +307,11 @@ class SubAgent:
 
     async def _resolve_tool_content_for_messages(self, *, tool_name: str, result: ToolResult, user_message: str) -> str:
         from .helpers import resolve_tool_content_for_messages
-        return await resolve_tool_content_for_messages(tool_name=tool_name, result=result, user_message=user_message, result_filter=self.result_filter, filterable=tool_name in _FILTERABLE_TOOLS)
+        return await resolve_tool_content_for_messages(
+            tool_name=tool_name, result=result, user_message=user_message,
+            result_filter=self.result_filter, filterable=tool_name in self._filter_tools,
+            agent_context=user_message,
+        )
 
     async def _archive_external_tool_result(
         self,

@@ -1,5 +1,5 @@
 """
-Session management for long-running legal case workspaces.
+Session management for long-running research workspaces.
 """
 
 from __future__ import annotations
@@ -160,19 +160,16 @@ class SessionManager:
     async def create(
         self, name: str = "", description: str = "", stage: str = "intake",
         metadata: dict[str, Any] | None = None,
-        workspace_profile: str = "",
         parent_session_id: str | None = None,
         compression_version: int = 1,
         initial_files: dict[str, str] | None = None,
-        profile_config: dict[str, Any] | None = None,
     ) -> Session:
         session = Session(name=name, description=description, stage=stage,
                           parent_session_id=parent_session_id, compression_version=compression_version)
         session.work_dir = str(self.sessions_dir / f"{session.id[:8]}_{_slugify(session.name or session.id)}")
-        files, folders = self._resolve_workspace_template(initial_files=initial_files, profile_config=profile_config)
+        files, folders = self._resolve_workspace_template(initial_files=initial_files)
         Path(session.work_dir).mkdir(parents=True, exist_ok=True)
         session.metadata = dict(metadata or {})
-        session.metadata["workspace_profile"] = workspace_profile
         self.store.create_session(
             session_id=session.id, name=session.name, description=session.description,
             stage=session.stage, work_dir=session.work_dir, metadata=session.metadata,
@@ -192,7 +189,6 @@ class SessionManager:
         new_session = await self.create(
             name=parent.name, description=parent.description, stage=parent.stage,
             metadata=parent.metadata,
-            workspace_profile=parent.metadata.get("workspace_profile", ""),
             parent_session_id=parent_session_id, compression_version=parent.compression_version + 1,
         )
         # Inherit parent's work_dir to keep file access seamless
@@ -408,9 +404,8 @@ class SessionManager:
     def _resolve_workspace_template(
         *,
         initial_files: dict[str, str] | None = None,
-        profile_config: dict[str, Any] | None = None,
     ) -> tuple[dict[str, str], list[str]]:
-        cfg = profile_config or _DEFAULT_PROFILE
+        cfg = _DEFAULT_PROFILE
         files = {
             _safe_workspace_path(relative_path): str(content)
             for relative_path, content in (cfg.get("files") or _DEFAULT_PROFILE["files"]).items()
@@ -456,10 +451,10 @@ class SessionManager:
                     pass
         memory_path = work_dir / "MEMORY.md"
         if not memory_path.exists():
-            tree = ["# 案件备忘", ""]
+            tree = ["# 研究备忘", ""]
             tree.append("## 当前进展")
             tree.append("")
-            tree.append("## 已知事实")
+            tree.append("## 关键发现")
             tree.append("")
             tree.append("## 待核实")
             tree.append("")

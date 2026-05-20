@@ -1,5 +1,5 @@
 """
-Runtime configuration for AgentOS4Law.
+Runtime configuration for AgentOS.
 
 Source priority:
   1. config.yaml — all behavioral settings (model, timeouts, thresholds, etc.)
@@ -83,6 +83,7 @@ class Settings:
     reasoning_effort: str | None = _reasoning
     log_level: str = _y("log_level", "WARNING")
     disabled_tools: list[str] | None = field(default=None)
+    filter_tools: list[str] | None = field(default=None)
     enable_explicit_cache: bool = _y("enable_explicit_cache", False)
 
     model_timeout_seconds: int = _y("model_timeout_seconds", 200)
@@ -142,4 +143,5 @@ class Settings:
             database_path=data_path / "agent_os.db",
             model=model or _y("model", "deepseek-v4-flash"),
             disabled_tools=_y("disabled_tools", None),
+            filter_tools=_y("filter_tools", None),
         )
