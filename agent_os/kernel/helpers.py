@@ -66,11 +66,6 @@ def format_exception(exc: BaseException) -> str:
 
 
 def is_content_filter_exception(exc: BaseException) -> bool:
-    if isinstance(exc, APIError):
-        code = getattr(exc, "code", None)
-        msg = getattr(exc, "message", None) or str(exc)
-        body = getattr(exc, "body", None)
-        return _is_content_filter_error(code=code, message=msg, body=body)
     code = getattr(exc, "code", None)
     msg = getattr(exc, "message", None) or str(exc)
     body = getattr(exc, "body", None)
