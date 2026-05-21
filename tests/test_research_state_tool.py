@@ -190,9 +190,35 @@ async def test_research_state_analyzes_associative_constraint_with_action_card()
     card = analyzed.data["action_card"]
     assert analyzed.data["next_action"] == "reason_from_known_facts"
     assert analyzed.data["constraint_analysis"]["constraint_type"] == "associative"
+    assert analyzed.data["control"]["reasoning_preferred"] is False
     assert "nationality / geography" in card["reasoning_lenses"]
     assert card["search_needed"] == "only_for_verification"
+    assert card["search_policy"] == "associative_prefer_reasoning_after_first_failed_match"
     assert "web_search" in card["blocked_next_tools"]
+
+
+@pytest.mark.asyncio
+async def test_associative_no_progress_prefers_reasoning_without_hard_block():
+    from agent_os.tools.registry import set_session_context
+    from agent_os.tools.research import handle_research_state
+
+    set_session_context(work_dir="", session_id="research-state-4")
+    await handle_research_state(operation="start", question_model={"answer_type": "entity"})
+    await handle_research_state(
+        operation="focus_constraint",
+        active_constraint="name reminds of a mountain resident",
+    )
+    await handle_research_state(
+        operation="inventory_known_facts",
+        candidate="Fleming",
+        known_facts=["Scottish scientist"],
+        reasoning_paths=["Scottish -> Highlands"],
+    )
+    await handle_research_state(operation="round_update", progress=False)
+
+    guidance = await handle_research_state(operation="next_action")
+    assert guidance.data["next_action"] == "reason_from_known_facts"
+    assert guidance.data["control"]["reasoning_preferred"] is True
 
 
 def test_research_guardrail_hints_before_hard_block():

@@ -31,6 +31,7 @@ def _empty_state() -> dict[str, Any]:
     return {
         "question_model": {},
         "active_constraint": "",
+        "active_constraint_type": "",
         "expected_gain": "",
         "candidates": {},
         "evidence": [],
@@ -97,6 +98,7 @@ def _public_state(state: dict[str, Any]) -> dict[str, Any]:
     return {
         "question_model": deepcopy(state["question_model"]),
         "active_constraint": state["active_constraint"],
+        "active_constraint_type": state.get("active_constraint_type", ""),
         "expected_gain": state["expected_gain"],
         "candidates": deepcopy(state["candidates"]),
         "evidence_count": len(state["evidence"]),
@@ -185,7 +187,7 @@ def _action_card(
     known_facts: list[str] | None = None,
 ) -> dict[str, Any]:
     active_constraint = state["active_constraint"]
-    ctype = constraint_type or _infer_constraint_type(active_constraint)
+    ctype = constraint_type or state.get("active_constraint_type") or _infer_constraint_type(active_constraint)
     lenses = _LENSES.get(ctype, _LENSES["factual"])
     facts = _as_list(known_facts)
     search_needed = "yes"
@@ -206,6 +208,11 @@ def _action_card(
         blocked = ["web_search"]
         search_needed = "only_for_verification" if facts or any(state["known_fact_inventory"].values()) else "after_inventory"
         why = "Known facts or reasoning paths may resolve the active constraint without another broad search."
+        if ctype == "associative":
+            required_output = (
+                "Write 2 competing interpretations, then prefer the one with fewer assumptions / shorter chain "
+                "unless explicit counter-evidence exists."
+            )
     elif action == "pivot":
         required_output = "Change query family or frame; do not repeat the same search wording."
         allowed = ["research_state", "web_search", "wikipedia_lookup"]
@@ -234,6 +241,11 @@ def _action_card(
         "allowed_next_tools": allowed,
         "blocked_next_tools": blocked,
         "search_needed": search_needed,
+        "search_policy": (
+            "associative_prefer_reasoning_after_first_failed_match"
+            if ctype == "associative"
+            else "normal"
+        ),
     }
 
 
@@ -247,10 +259,16 @@ def _next_action(state: dict[str, Any]) -> dict[str, Any]:
         if item.get("status") == "winner"
     ]
     has_rejected = any(item.get("status") == "rejected" for item in candidates.values())
+    active_type = state.get("active_constraint_type") or _infer_constraint_type(state["active_constraint"])
     answer_allowed = bool(winners and (has_rejected or len(candidates) <= 1))
     must_inventory = has_active_constraint and not has_known_facts
     must_pivot = state["failed_pivots"] >= 1 and not answer_allowed
     must_stop = state["failed_pivots"] >= 2 and not answer_allowed
+    reasoning_preferred = bool(
+        active_type == "associative"
+        and state["no_progress_rounds"] >= 1
+        and (has_known_facts or has_reasoning_paths)
+    )
 
     if answer_allowed:
         action = "answer_allowed"
@@ -260,6 +278,8 @@ def _next_action(state: dict[str, Any]) -> dict[str, Any]:
         action = "focus_constraint"
     elif must_inventory:
         action = "inventory_known_facts"
+    elif reasoning_preferred:
+        action = "reason_from_known_facts"
     elif has_reasoning_paths:
         action = "reason_from_known_facts"
     elif must_pivot:
@@ -274,6 +294,7 @@ def _next_action(state: dict[str, Any]) -> dict[str, Any]:
             "must_inventory_known_facts": must_inventory,
             "must_pivot": must_pivot,
             "must_stop_or_answer_uncertain": must_stop,
+            "reasoning_preferred": reasoning_preferred,
         },
         "state": _public_state(state),
         "action_card": _action_card(state, action),
@@ -324,6 +345,7 @@ async def handle_research_state(
 
     if op == "focus_constraint":
         state["active_constraint"] = active_constraint.strip()
+        state["active_constraint_type"] = _infer_constraint_type(state["active_constraint"])
         state["expected_gain"] = expected_gain.strip()
         _save_state(state)
         return ToolResult.ok(data=_next_action(state))
@@ -380,6 +402,7 @@ async def handle_research_state(
     if op == "pivot":
         state["pivot_history"].append(pivot_strategy.strip() or "change query family or frame")
         state["active_constraint"] = ""
+        state["active_constraint_type"] = ""
         state["expected_gain"] = ""
         state["known_fact_inventory"] = {}
         state["reasoning_paths"] = {}
@@ -391,6 +414,7 @@ async def handle_research_state(
         if constraint_text:
             state["active_constraint"] = constraint_text
         ctype = constraint_type.strip() or _infer_constraint_type(constraint_text)
+        state["active_constraint_type"] = ctype
         facts = _as_list(known_facts)
         if facts:
             name = candidate.strip() or "__general__"

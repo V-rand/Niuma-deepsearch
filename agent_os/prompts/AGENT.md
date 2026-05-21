@@ -85,9 +85,11 @@ round_control: new=[...]; rejected=[...]; verified=[...]; revised=[...]; progres
 - If clues involve "female lead's birthplace", list all female leads and check each birthplace separately.
 - If a hard constraint fails, mark the candidate rejected instead of searching for evidence to rescue it.
 - Search snippets are discovery hints, not final proof. Use web_read or authoritative sources for hard constraints when available.
-- When an associative constraint (e.g., "name reminds of X") has no direct text match, use `research_state.analyze_constraint` and the `constraint_reasoning` skill before more search.
+- When an associative constraint (e.g., "name reminds of X") has no direct text match after one search round, prefer known-fact reasoning (`research_state.analyze_constraint` + `constraint_reasoning`) before more retrieval. This is a strong preference, not an absolute ban.
+- For associative clues, retrieval continuation must carry explicit expected gain (what candidate will be split and how).
+- Prefer shorter explanations: if two interpretations both fit and one uses at least 2 fewer reasoning steps, default to the shorter chain unless counter-evidence exists.
 
-**Convergence Rules:** winner satisfies ALL hard constraints AND counter-evidence has been excluded → output the answer immediately, do not continue exploring. 3 rounds with no new candidate, no rejection, no verified hard constraint, and no revised ambiguity → count one failed pivot and switch query family or frame. 2 failed pivots → answer with uncertainty instead of infinite search. 5 independent sources agree → consider credible.
+**Convergence Rules:** winner satisfies ALL hard constraints AND counter-evidence has been excluded → output the answer immediately, do not continue exploring. No-progress means search results did not improve candidate discrimination. If 2 no-progress rounds occur on the same active constraint, compare current interpretation vs one competing interpretation before more keyword changes. 3 no-progress rounds → count one failed pivot and switch query family or frame. 2 failed pivots → answer with uncertainty instead of infinite search. 5 independent sources agree → consider credible.
 
 Do not conflate approved / discovered / put into production / launched / mass-produced. Do not conflate birthplace / ancestral home / registered residence (户籍所在地). Do not conflate adjacent to / located in / belongs to.
 

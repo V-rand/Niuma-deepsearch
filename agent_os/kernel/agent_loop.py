@@ -94,6 +94,7 @@ class AgentLoop:
         # time can be obtained via bash date command when needed.
         self._session_start_time = datetime.now()
         self._last_prompt_tokens: dict[str, int] = {}
+        self._last_assistant_msg_id: dict[str, int] = {}
 
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url,
                                   timeout=self.request_timeout_seconds, max_retries=0)
@@ -426,6 +427,7 @@ class AgentLoop:
                         )
                         if not ok:
                             yield {"type": "activity", "phase": "run.interrupted", "detail": "收到中断请求，正在停止"}
+                            await self._rollback_orphaned_tool_call(session_id)
                             break
                         async for evt in self._emit_tool_results_parallel(tool_calls, raw, session_id, iteration, message, messages):
                             yield evt
@@ -447,6 +449,9 @@ class AgentLoop:
                             results = [raw]
                             async for evt in self._emit_tool_results_parallel([tc], results, session_id, iteration, message, messages):
                                 yield evt
+                    if not ok:
+                        await self._rollback_orphaned_tool_call(session_id)
+                        break
 
                     if any(tc["name"] == "todowrite" for tc in tool_calls):
                         consecutive_tool_rounds = 0
@@ -500,6 +505,10 @@ class AgentLoop:
             except Exception as exc:
                 detail = format_exception(exc)
                 is_content_filter = self._is_content_filter_error_chain(exc)
+                # Tool-calls pairing errors leave an orphaned assistant(tool_calls) in DB
+                is_tool_call_pairing = "tool_calls" in detail and "must be followed" in detail
+                if is_tool_call_pairing:
+                    await self._rollback_orphaned_tool_call(session_id)
                 snapshot_path = self._write_failure_snapshot(
                     session=session,
                     session_id=session_id,
@@ -559,6 +568,10 @@ class AgentLoop:
         if main_task in done:
             return True, main_task.result()
         main_task.cancel()
+        try:
+            await main_task
+        except BaseException:
+            pass
         interrupt_event.clear()
         return False, None
 
@@ -708,6 +721,44 @@ class AgentLoop:
             return request_kwargs, 0
         return {**request_kwargs, "messages": retry_messages}, stripped
 
+    async def _rollback_orphaned_tool_call(self, session_id: str) -> None:
+        """Delete the last persisted assistant message from DB if its tool
+        results were never stored (interrupted tool execution or API error)."""
+        msg_id = self._last_assistant_msg_id.pop(session_id, None)
+        if msg_id is not None:
+            try:
+                await self.sessions.delete_message(msg_id)
+            except Exception:
+                logger.warning("Failed to rollback orphaned tool-call message %s", msg_id)
+
+    @staticmethod
+    def _prune_orphaned_tool_messages(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Ensure all assistant(tool_calls) ↔ tool pairs are closed.
+        Removes orphaned tools at start and incomplete tool_calls groups."""
+        if not msgs:
+            return msgs
+        result = list(msgs)
+        # Step 1: drop leading orphan tool messages
+        while result and result[0].get("role") == "tool":
+            result.pop(0)
+        # Step 2: find the last assistant with tool_calls and check its tools
+        last_tc = -1
+        for i in range(len(result) - 1, -1, -1):
+            if result[i].get("role") == "assistant" and result[i].get("tool_calls"):
+                last_tc = i
+                break
+        if last_tc >= 0:
+            tcs = result[last_tc].get("tool_calls")
+            tool_count = 0
+            for j in range(last_tc + 1, len(result)):
+                if result[j].get("role") == "tool":
+                    tool_count += 1
+                else:
+                    break
+            if tool_count < len(tcs):
+                del result[last_tc:]  # remove incomplete group
+        return result
+
     @staticmethod
     def _is_context_length_error(exc: BaseException) -> bool:
         """Check if an exception is a context_length_exceeded error."""
@@ -784,8 +835,9 @@ class AgentLoop:
             # returns 400. Non-tool-call turns don't need it (ignored).
             assistant_meta["reasoning_content"] = reasoning_text
         messages.append(assistant_msg)
-        await self.sessions.add_message(session_id, "assistant", output_text or "", kind="chat",
-                                        metadata=assistant_meta)
+        msg_id = await self.sessions.add_message(session_id, "assistant", output_text or "", kind="chat",
+                                                  metadata=assistant_meta)
+        self._last_assistant_msg_id[session_id] = msg_id
         yield {"type": "activity", "phase": "tools.planned",
                "detail": f"模型计划调用: {', '.join(c['name'] for c in tool_calls)}",
                "payload": {"tools": [c["name"] for c in tool_calls], "iteration": iteration}}
@@ -1360,6 +1412,11 @@ class AgentLoop:
         while tail_messages and tail_messages[0].get("role") == "tool":
             tail_messages.pop(0)
 
+        # Ensure tail does not end with orphaned assistant(tool_calls)
+        # whose tool responses were partially cut by the budget, and
+        # handle 1:vn cases where some tools are missing.
+        tail_messages = self._prune_orphaned_tool_messages(tail_messages)
+
         if not head_messages:
             # All messages fit in tail budget OR tail budget exceeded by first checked message.
             # If we're still over threshold, compress everything except system prompt.
@@ -1393,6 +1450,8 @@ class AgentLoop:
         # Append preserved tail messages for seamless continuation
         for msg in tail_messages:
             new_messages.append(msg)
+        # Final safety: prune any orphans introduced during message assembly
+        new_messages = self._prune_orphaned_tool_messages(new_messages)
 
         await self.sessions.add_message(new_session.id, "user", handoff, kind="chat")
         for msg in tail_messages:
@@ -1543,6 +1602,9 @@ class AgentLoop:
         The caller checks for ``session.compressed`` events and re-initialises
         session context when compaction switches to a new session.
         """
+        # Ensure messages are API-safe before any checks
+        messages[:] = self._prune_orphaned_tool_messages(messages)
+
         # -- 1. Mid-run upload detection ----------------------------------------
         new_upload_files = self._check_uploads_changed(session.work_dir, session_id)
         if new_upload_files:
