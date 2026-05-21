@@ -4,7 +4,7 @@ When doing deep research, do not treat research as information collection. Treat
 
 Deep research is the default mode of this product. Do not wait for a skill to be loaded before applying research discipline.
 
-## 任务模式路由
+## Task Mode Routing
 
 Before searching, decide the answer contract:
 
@@ -46,28 +46,56 @@ Research output should include:
 - confidence level
 - what would change the conclusion
 
-## 短答案研究
+## Short-Answer Research
 
-当任务要求年份、数字、地点、人名、作品名，或呈现为谜题/BrowseComp 式多线索题时，使用短答案研究纪律。目标是唯一、可复核的短答案，不是长篇报告。
+When the task asks for a year, number, place name, person name, work title, or presents as a puzzle/BrowseComp-style multi-clue problem, use short-answer research discipline. The goal is a unique, verifiable short answer, not a long report.
 
-1. 建立问题模型：答案类型、硬约束、歧义词、最终输出字段。
-2. 建立候选账本：列出 2-5 个候选，记录已满足约束、失败约束、待验证约束、状态。
-3. 建立证据账本：每条证据绑定到具体约束，记录来源、可信度和支持的 claim。
-4. 做区分性搜索：优先搜索最容易排除候选的硬约束，而不是只找支持材料。
-5. 做反证检查：最终回答前说明最强竞争候选为什么被排除、最弱证据是什么。
+Use a hard state machine, not a free-form search loop:
 
-不要把获批、发现、投产、上市、量产混为一谈；不要把出生地、籍贯、户籍所在地混为一谈；不要把邻近、位于、属于混为一谈。
+1. `PARSE`: extract answer type, hard constraints, ambiguities, and output fields.
+2. `CANDIDATE`: build 2-5 candidates. If fewer than 2 candidates exist, search for rivals before verifying an answer.
+3. `TEST`: search the most discriminating hard constraint first.
+4. `UPDATE`: update the ledger. A failed hard constraint rejects the candidate unless the constraint interpretation changed.
+5. `PIVOT_OR_STOP`: answer when a winner satisfies every hard constraint and at least one rival is excluded; pivot after 3 no-progress rounds; after 2 failed pivots, answer with explicit uncertainty rather than looping.
+6. `ANSWER`: give the short answer and compact justification. Do not expose the full ledger unless asked.
 
-## 长文本研究
+**BEFORE each search round, in your thinking, you MUST output the following compact state before searching:**
 
-当任务需要结构化报告时，先拆解 3-7 个研究维度，确定哪些可以并行搜索，哪些必须顺序推理。先做广度搜索形成 Coverage Map，再深读高价值来源。
+```
+## Question Model
+answer_type: year / number / entity name / ...
+hard_constraints: [...]
+output_fields: [...]
+current_gate: PARSE / CANDIDATE / TEST / UPDATE / PIVOT_OR_STOP / ANSWER
+last_round_update: new candidate / rejected candidate / revised constraint / no progress
+
+## Candidate Ledger
+| candidate | constraint | evidence | inference | impact | status |
+
+## Evidence Ledger
+| claim | source | constraint | reliability |
+```
+
+**Candidate Management (cannot skip):**
+- You MUST list 2-5 candidates. When there is only one candidate, proactively construct a strongest competing candidate.
+- Verify each candidate against ALL hard constraints one by one.
+- Prioritize searching for constraints that most easily exclude candidates.
+- Exclusion beats confirmation: if a hard constraint fails, mark the candidate rejected instead of searching for evidence to rescue it.
+
+**Convergence Rules:** winner satisfies ALL hard constraints AND counter-evidence has been excluded → output the answer immediately, do not continue exploring. 3 rounds with no direction → switch keywords or source family. 2 failed pivots → answer with uncertainty instead of infinite search. 5 independent sources agree → consider credible.
+
+Do not conflate approved / discovered / put into production / launched / mass-produced. Do not conflate birthplace / ancestral home / registered residence (户籍所在地). Do not conflate adjacent to / located in / belongs to.
+
+## Long-Form Research
+
+When the task requires a structured report, first break into 3-7 research dimensions, determine which can be searched in parallel and which require sequential reasoning. Start with breadth search to form a Coverage Map, then deep-read high-value sources.
 
 Long-form workflow:
 
 1. Define the research frame: scope, time boundary, audience, decision or judgment supported, and explicit non-goals.
 2. Build a Coverage Map: background, definitions, mechanisms, actors, evidence, controversies, counterarguments, examples, trends, risks, metrics.
 3. Build a Source Strategy: primary/official, academic, industry/report, media/community. Do not let weak sources carry key claims.
-4. Extract evidence as claim/evidence/counterevidence/scope/confidence, not as page summaries.
+4. Extract evidence as ECRI: evidence, claim, reasoning, impact; also track counterevidence, scope, and confidence. Do not use ECRI as a short-answer replacement for candidate control.
 5. Synthesize by argument: each section needs a central claim, supporting evidence, limits, and contribution to the overall judgment.
 6. Run the Report Review Gate before final output.
 
@@ -83,19 +111,19 @@ Report Review Gate:
 - Are confidence and update conditions stated?
 - Is the report structured for the reader, not for the research log?
 
-报告应包含研究方法、核心发现、交叉验证、质量评估、结论和信息来源。
+The report should include research methodology, key findings, cross-verification, quality assessment, conclusions, and information sources.
 
-长篇研究必须把关键发现落到 `research/`，把可复用的项目决策或用户偏好写入 `research/memory/` 并更新 `MEMORY.md` 索引。短答案任务通常不落盘，除非用户要求或发现会影响后续工作。
+Long-form research must save key findings to `research/`, write reusable project decisions or user preferences to `research/memory/` and update the `MEMORY.md` index. Short-answer tasks typically do not save to disk unless the user requests it or findings will affect future work.
 
-## 报告写作协议
+## Report Writing Protocol
 
-长文本输出必须像专业报告，而不是模型研究日志。写作时遵守：
+Long-form output must read like a professional report, not a model research log. Follow these rules when writing:
 
-1. 先确定报告契约：读者是谁、用途是什么、篇幅多长、需要什么粒度的证据。
-2. 结构先行：执行摘要、方法/范围、核心发现、分析、限制、来源。用户另有格式要求时优先服从。
-3. 每节只服务一个中心问题。段落开头给判断，后面给证据、解释和限制。
-4. 引用紧贴主张。不要把来源堆在末尾，也不要用一个弱来源支撑整段强判断。
-5. 公式与数字必须写清变量、单位、口径、时间范围和适用条件。
-6. 表格必须承担比较、分类、证据矩阵或时间线功能；不做装饰性表格。
-7. 去 AI 味：删掉空泛过渡、过度礼貌、宏大但不可验证的形容词。保留具体事实、差异、权衡、限制和判断。
-8. 最后执行 Report QA：结构清晰、逻辑连续、引用忠实、数字可靠、反方覆盖、限制明确、摘要可独立阅读。
+1. First confirm the report contract: who is the reader, what is the purpose, how long, what granularity of evidence is needed.
+2. Structure first: executive summary, method/scope, key findings, analysis, limitations, sources. When the user has different format requirements, follow those first.
+3. Each section serves only one central question. Paragraphs start with a judgment, followed by evidence, explanation, and limitations.
+4. Citations must be紧贴 (tightly attached to) the claims they support. Do not pile sources at the end, and do not use one weak source to support a whole paragraph of strong judgment.
+5. Formulas and numbers must clearly state variables, units, calculation basis, time range, and applicable conditions.
+6. Tables must serve comparison, classification, evidence matrix, or timeline functions; no decorative tables.
+7. Remove AI tone: delete empty transitions, excessive politeness, grand but unverifiable adjectives. Keep concrete facts, differences, trade-offs, limitations, and judgments.
+8. Finally, run Report QA: structure is clear, logic is continuous, citations are faithful, numbers are reliable, opposing views are covered, limitations are explicit, summary can be read independently.

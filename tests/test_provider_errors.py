@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from openai import BadRequestError
@@ -60,6 +61,65 @@ def test_format_exception_coalesces_provider_content_filter_error():
     assert "Provider content filter blocked the request [DataInspectionFailed]" in detail
     assert "raw_message=Error code: 400 - Input data may contain inappropriate content." in detail
     assert "body={'code': 'DataInspectionFailed', 'message': 'Input data may contain inappropriate content.'}" in detail
+
+
+def test_malformed_provider_content_filter_error_is_detected():
+    from agent_os.kernel.helpers import is_content_filter_exception
+
+    exc = ValueError(
+        'Type validation failed: {"code":"InvalidParameter","message":"<400> '
+        'InternalError.Algo.DataInspectionFailed: Output data may contain inappropriate content."}'
+    )
+
+    assert is_content_filter_exception(exc)
+
+
+@pytest.mark.asyncio
+async def test_content_filter_retry_strips_tail_without_mutating_original_request():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    class _Create:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        async def __call__(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                raise _make_content_filter_error()
+            return "ok"
+
+    create = _Create()
+
+    class _Client:
+        def __init__(self) -> None:
+            self.chat = SimpleNamespace(completions=SimpleNamespace(create=create))
+
+        def with_options(self, **kwargs):
+            return self
+
+    loop = AgentLoop.__new__(AgentLoop)
+    loop.client = _Client()
+    messages = [
+        {"role": "system", "content": "stable system"},
+        {"role": "user", "content": "current user"},
+        {"role": "assistant", "content": "sensitive prior output"},
+        {"role": "tool", "content": "sensitive tool tail"},
+    ]
+    request_kwargs = {"model": "test-model", "messages": messages}
+
+    response, events = await loop._request_model_with_retry(
+        request_kwargs,
+        effective_timeout=5,
+        session_id="s1",
+        iteration=1,
+    )
+
+    assert response == "ok"
+    assert len(create.calls) == 2
+    assert create.calls[0]["messages"] == messages
+    assert create.calls[1]["messages"] == messages[:2]
+    assert request_kwargs["messages"] == messages
+    assert any(event.get("phase") == "model.retry" for event in events)
 
 
 @pytest.mark.asyncio

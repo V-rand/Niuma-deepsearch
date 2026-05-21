@@ -34,18 +34,18 @@ def test_persistent_prompts_absorb_short_answer_research_discipline():
     soul = Path("agent_os/prompts/SOUL.md").read_text(encoding="utf-8")
     memory = Path("agent_os/prompts/memory_guidance.txt").read_text(encoding="utf-8")
 
-    assert "短答案研究" in agent
-    assert "任务模式路由" in agent
-    assert "候选账本" in agent
-    assert "证据账本" in agent
-    assert "反证检查" in agent
-    assert "长文本研究" in agent
+    assert "Short-Answer Research" in agent
+    assert "Task Mode Routing" in agent
+    assert "Candidate Ledger" in agent
+    assert "Evidence Ledger" in agent
+    assert "Convergence Rules" in agent
+    assert "Long-Form Research" in agent
     assert "Coverage Map" in agent
     assert "Report Review Gate" in agent
-    assert "报告写作协议" in agent
-    assert "去 AI 味" in agent
-    assert "公式与数字" in agent
-    assert "不要把获批、发现、投产、上市、量产混为一谈" in agent
+    assert "Report Writing Protocol" in agent
+    assert "Remove AI tone" in agent
+    assert "Formulas and numbers" in agent
+    assert "Do not conflate approved / discovered / put into production / launched / mass-produced" in agent
     assert "反确认偏误" in soul
     assert "校准置信度" in soul
     assert "报告效用" in soul

@@ -543,12 +543,14 @@ class AgentLoop:
         session_id: str, iteration: int,
     ) -> tuple[Any, list[dict[str, Any]]]:
         max_retries = 2
+        cf_retried = False
+        active_request_kwargs = request_kwargs
         events: list[dict[str, Any]] = []
-        for attempt in range(max_retries + 1):
+        for attempt in range(max_retries + 2):
             try:
                 response = await asyncio.wait_for(
                     self.client.with_options(timeout=effective_timeout).chat.completions.create(
-                        **request_kwargs, stream=True, stream_options={"include_usage": True},
+                        **active_request_kwargs, stream=True, stream_options={"include_usage": True},
                     ),
                     timeout=effective_timeout,
                 )
@@ -560,7 +562,19 @@ class AgentLoop:
                     await asyncio.sleep(wait_s)
                 else:
                     raise RuntimeError(f"Model request failed after {max_retries + 1} attempts: {format_exception(exc)}") from exc
-            except (AuthenticationError, BadRequestError):
+            except AuthenticationError:
+                raise
+            except BadRequestError as exc:
+                retry_kwargs, stripped = self._content_filter_retry_kwargs(request_kwargs)
+                if not cf_retried and is_content_filter_exception(exc) and stripped:
+                    cf_retried = True
+                    active_request_kwargs = retry_kwargs
+                    events.append({
+                        "type": "activity", "phase": "model.retry",
+                        "detail": f"内容审查命中，已移除 {stripped} 条消息后重试 (1/1)",
+                        "payload": {"attempt": attempt + 1, "iteration": iteration, "error": str(exc)},
+                    })
+                    continue
                 raise
             except (APIError, RateLimitError, InternalServerError) as exc:
                 if attempt < max_retries:
@@ -569,7 +583,37 @@ class AgentLoop:
                     await asyncio.sleep(wait_s)
                 else:
                     raise RuntimeError(format_exception(exc)) from exc
+            except Exception as exc:
+                retry_kwargs, stripped = self._content_filter_retry_kwargs(request_kwargs)
+                if not cf_retried and is_content_filter_exception(exc) and stripped:
+                    cf_retried = True
+                    active_request_kwargs = retry_kwargs
+                    events.append({
+                        "type": "activity", "phase": "model.retry",
+                        "detail": f"内容审查命中，已移除 {stripped} 条消息后重试 (1/1)",
+                        "payload": {"attempt": attempt + 1, "iteration": iteration, "error": str(exc)},
+                    })
+                    continue
+                raise
         return None, events
+
+    @staticmethod
+    def _content_filter_retry_kwargs(request_kwargs: dict[str, Any]) -> tuple[dict[str, Any], int]:
+        messages = request_kwargs.get("messages")
+        if not isinstance(messages, list):
+            return request_kwargs, 0
+        retry_messages = list(messages)
+        stripped = 0
+        while retry_messages and stripped < 20:
+            last = retry_messages[-1]
+            if isinstance(last, dict) and last.get("role") in ("assistant", "tool"):
+                retry_messages.pop()
+                stripped += 1
+                continue
+            break
+        if not stripped:
+            return request_kwargs, 0
+        return {**request_kwargs, "messages": retry_messages}, stripped
 
     @staticmethod
     def _is_context_length_error(exc: BaseException) -> bool:
@@ -985,15 +1029,16 @@ class AgentLoop:
             # only load system messages and workspace snapshot as recovery.
             recent = await self.sessions.get_messages(session_id, limit=20, kinds=["system"])
         elif session_id in self._content_filter_quarantine_sessions:
-            # Level 1: the triggering user message was deleted from DB, but
-            # assistant replies and tool results remain — load them all.
-            recent = await self.sessions.get_messages(session_id)
+            # Level 1: provider filters can be triggered by prior chat/tool
+            # text, not only the current user message. Keep stable system
+            # context and workspace/memory, but skip chat/tool history.
+            recent = await self.sessions.get_messages(session_id, limit=20, kinds=["system"])
             messages.append({
                 "role": "user",
                 "content": (
                     "<system-reminder>\n"
                     "上一轮请求因触及内容安全审查被拦截，已自动移除该条触发消息。\n"
-                    "以下是之前已保存的对话材料和搜索结果，请基于已有信息继续工作。\n"
+                    "本轮已临时跳过历史 chat/tool 上下文，请基于稳定系统上下文、记忆和工作区继续工作。\n"
                     "</system-reminder>"
                 ),
             })
