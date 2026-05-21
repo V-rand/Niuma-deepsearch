@@ -202,18 +202,6 @@ class AgentOS:
             stage=stage,
             initial_files=initial_files,
         )
-        await self.workspace_memory.upsert_artifact(
-            session.id,
-            path="workspace.md",
-            content=(
-                f"# {session.name or session.id}\n\n"
-                f"## 当前状态\n\n{session.stage}\n\n"
-                "## 目标\n\n"
-            ),
-            artifact_type="summary",
-            title="Workspace Overview",
-            summary="工作区总览",
-        )
         return session
 
     async def get_session(self, session_id: str) -> Session | None:

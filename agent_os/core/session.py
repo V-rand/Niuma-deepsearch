@@ -18,7 +18,7 @@ from ..config import _y
 _ws = _y("workspace", {}) or {}
 _DEFAULT_PROFILE = {
     "folders": _ws.get("folders", ["uploads", "research", "drafts", "raw_search", "logs"]),
-    "files": _ws.get("files", {"workspace.md": "# {{session_name}}\n\n## 目标\n\n"}),
+    "files": _ws.get("files", {}),
 }
 
 

@@ -63,7 +63,7 @@ else:
 
 _ws = _y("workspace", {}) or {}
 _ws_folders = _ws.get("folders", ["uploads", "research", "drafts", "raw_search", "logs"])
-_ws_files = _ws.get("files", {"workspace.md": "# {{session_name}}\n\n## 目标\n\n"})
+_ws_files = _ws.get("files", {})
 
 
 @dataclass

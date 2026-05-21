@@ -77,21 +77,21 @@ async def handle_wikipedia_lookup(query: str, lang: str = "", **kw) -> ToolResul
                 pid = next(iter(pages)) if pages else "-1"
                 page_info = pages.get(pid, {})
 
-            result: dict[str, Any] = {
-                "query": query, "title": title,
-                "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
-                "summary": page_info.get("extract", "")[:2000],
-                "categories": [c["title"] for c in page_info.get("categories", [])][:15],
-            }
-            try:
-                hr = await c.get(result["url"], headers={"User-Agent": UA}, timeout=8)
-                if hr.status_code == 200:
-                    ib = _parse_infobox(hr.text)
-                    if ib:
-                        result["infobox"] = ib
-            except Exception:
-                pass
-            return result
+                result: dict[str, Any] = {
+                    "query": query, "title": title,
+                    "url": f"https://en.wikipedia.org/wiki/{title.replace(' ', '_')}",
+                    "summary": page_info.get("extract", "")[:2000],
+                    "categories": [c["title"] for c in page_info.get("categories", [])][:15],
+                }
+                try:
+                    hr = await c.get(result["url"], headers={"User-Agent": UA}, timeout=8)
+                    if hr.status_code == 200:
+                        ib = _parse_infobox(hr.text)
+                        if ib:
+                            result["infobox"] = ib
+                except Exception:
+                    pass
+                return result
         except Exception:
             return None
 

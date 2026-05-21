@@ -72,12 +72,12 @@ class ContextCompiler:
         if skills_index:
             prompt_sections.append(skills_index)
 
-        memory_content = self.build_memory_content(session)
+        dynamic_context = self.build_memory_content(session)
 
         return CompiledContext(
             system_prompt="\n\n".join(prompt_sections),
             recent_messages=recent_messages[-max_messages:],
-            memory_content=memory_content,
+            memory_content=dynamic_context,
         )
 
     def build_memory_content(self, session: Session) -> str:

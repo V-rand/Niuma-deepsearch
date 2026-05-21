@@ -50,14 +50,16 @@ Research output should include:
 
 When the task asks for a year, number, place name, person name, work title, or presents as a puzzle/BrowseComp-style multi-clue problem, use short-answer research discipline. The goal is a unique, verifiable short answer, not a long report.
 
-Use a hard state machine, not a free-form search loop:
+Use `research_state` as the external control surface for short-answer work. Before repeated search/read calls, externalize the active constraint, known facts, reasoning paths, candidates, evidence, and round progress. If `research_state` returns an `action_card`, follow it before searching.
 
-1. `PARSE`: extract answer type, hard constraints, ambiguities, and output fields.
-2. `CANDIDATE`: build 2-5 candidates. If fewer than 2 candidates exist, search for rivals before verifying an answer.
-3. `TEST`: search the most discriminating hard constraint first. **Before searching, explicitly inventory what you already know about the candidate that relates to this constraint — resolve by reasoning if possible before reaching for search.**
-4. `UPDATE`: update the ledger. A failed hard constraint rejects the candidate unless the constraint interpretation changed.
-5. `PIVOT_OR_STOP`: answer when a winner satisfies every hard constraint and at least one rival is excluded; pivot after 3 no-progress rounds; after 2 failed pivots, answer with explicit uncertainty rather than looping. **Method switch**: If 2 consecutive search rounds fail to resolve the current constraint, stop searching and reason from known facts about the candidate (background, origin, etymology, culture) instead of searching for a direct text match.
-6. `ANSWER`: give the short answer and compact justification. Do not expose the full ledger unless asked.
+Use a hard state machine, not a free-form search loop. The state is a control surface for deciding the next action, not material for the final answer.
+
+1. `PARSE`: extract answer type, hard constraints, soft clues, ambiguous terms, and output fields. Treat wording differences as possible traps.
+2. `CANDIDATE`: build 2-5 candidates before answer verification. If fewer than 2 candidates exist, search for rivals. If the question names a relation such as "female lead", enumerate the role members instead of choosing the most famous one.
+3. `TEST`: test the hard constraint most likely to split candidates. For associative, linguistic, geographic, or inference-heavy clues, call `research_state(operation="analyze_constraint")` before broad search.
+4. `UPDATE`: update the ledger after every tool batch. A failed hard constraint rejects the candidate unless the constraint interpretation changed. Surviving candidates must have every hard constraint either matched or listed as missing.
+5. `PIVOT_OR_STOP`: progress means new candidate, rejected candidate, verified hard constraint, or revised ambiguity. Three no-progress rounds equal one failed pivot. After one failed pivot, change query family or frame; after two failed pivots, answer with explicit uncertainty rather than looping.
+6. `ANSWER`: answer immediately when one candidate satisfies all hard constraints and the strongest rival is excluded. Give the short answer and compact justification. Do not expose the full ledger unless asked.
 
 **BEFORE each search round, in your thinking, you MUST output the following compact state before searching:**
 
@@ -65,25 +67,27 @@ Use a hard state machine, not a free-form search loop:
 ## Question Model
 answer_type: year / number / entity name / ...
 hard_constraints: [...]
+soft_clues: [...]
+ambiguities: [...]
 output_fields: [...]
 current_gate: PARSE / CANDIDATE / TEST / UPDATE / PIVOT_OR_STOP / ANSWER
-last_round_update: new candidate / rejected candidate / revised constraint / no progress
+round_control: new=[...]; rejected=[...]; verified=[...]; revised=[...]; progress=yes/no; no_progress_rounds=0-3; failed_pivots=0-2
 
 ## Candidate Ledger
-| candidate | constraint | evidence | inference | impact | status |
+| candidate | matched | failed | missing | status |
 
 ## Evidence Ledger
-| claim | source | constraint | reliability |
+| claim | source | constraint | verdict | reliability |
 ```
 
-**Candidate Management (cannot skip):**
-- You MUST list 2-5 candidates. When there is only one candidate, proactively construct a strongest competing candidate.
-- Verify each candidate against ALL hard constraints one by one.
-- Prioritize searching for constraints that most easily exclude candidates.
-- Exclusion beats confirmation: if a hard constraint fails, mark the candidate rejected instead of searching for evidence to rescue it.
-- **When an associative constraint (e.g., "name reminds of X") has no direct text match, reason from the candidate's background (nationality, ethnicity, surname origin, biography). Connecting known facts can be more effective than more searching.**
+**Supplementary Rules:**
+- Do not just check if a candidate "looks reasonable" overall. Evidence must bind to a specific hard constraint.
+- If clues involve "female lead's birthplace", list all female leads and check each birthplace separately.
+- If a hard constraint fails, mark the candidate rejected instead of searching for evidence to rescue it.
+- Search snippets are discovery hints, not final proof. Use web_read or authoritative sources for hard constraints when available.
+- When an associative constraint (e.g., "name reminds of X") has no direct text match, use `research_state.analyze_constraint` and the `constraint_reasoning` skill before more search.
 
-**Convergence Rules:** winner satisfies ALL hard constraints AND counter-evidence has been excluded → output the answer immediately, do not continue exploring. 3 rounds with no direction → switch keywords or source family. 2 failed pivots → answer with uncertainty instead of infinite search. 5 independent sources agree → consider credible.
+**Convergence Rules:** winner satisfies ALL hard constraints AND counter-evidence has been excluded → output the answer immediately, do not continue exploring. 3 rounds with no new candidate, no rejection, no verified hard constraint, and no revised ambiguity → count one failed pivot and switch query family or frame. 2 failed pivots → answer with uncertainty instead of infinite search. 5 independent sources agree → consider credible.
 
 Do not conflate approved / discovered / put into production / launched / mass-produced. Do not conflate birthplace / ancestral home / registered residence (户籍所在地). Do not conflate adjacent to / located in / belongs to.
 
@@ -94,10 +98,10 @@ When the task requires a structured report, first break into 3-7 research dimens
 Long-form workflow:
 
 1. Define the research frame: scope, time boundary, audience, decision or judgment supported, and explicit non-goals.
-2. Build a Coverage Map: background, definitions, mechanisms, actors, evidence, controversies, counterarguments, examples, trends, risks, metrics.
+2. Build a Coverage Map: background, definitions, mechanisms, actors, evidence, controversies, counterarguments, examples, trends, risks, metrics. Mark each dimension as covered, weak, or out-of-scope.
 3. Build a Source Strategy: primary/official, academic, industry/report, media/community. Do not let weak sources carry key claims.
-4. Extract evidence as ECRI: evidence, claim, reasoning, impact; also track counterevidence, scope, and confidence. Do not use ECRI as a short-answer replacement for candidate control.
-5. Synthesize by argument: each section needs a central claim, supporting evidence, limits, and contribution to the overall judgment.
+4. Extract evidence as ECRI for key claims: evidence, claim, reasoning, impact; also track counterevidence, scope, and confidence. ECRI is a synthesis discipline, not a visible template for every sentence, and not a short-answer replacement for candidate control.
+5. Synthesize by argument: each section needs a central claim, supporting evidence, limits, and contribution to the overall judgment. If evidence is mixed, separate established facts, plausible interpretations, and unresolved uncertainty.
 6. Run the Report Review Gate before final output.
 
 Coverage Map must be revisited after each search round. If a dimension remains empty, either search for it, mark it out of scope, or explain the gap.
@@ -123,8 +127,8 @@ Long-form output must read like a professional report, not a model research log.
 1. First confirm the report contract: who is the reader, what is the purpose, how long, what granularity of evidence is needed.
 2. Structure first: executive summary, method/scope, key findings, analysis, limitations, sources. When the user has different format requirements, follow those first.
 3. Each section serves only one central question. Paragraphs start with a judgment, followed by evidence, explanation, and limitations.
-4. Citations must be紧贴 (tightly attached to) the claims they support. Do not pile sources at the end, and do not use one weak source to support a whole paragraph of strong judgment.
+4. Citations must be tightly attached to the claims they support. Do not pile sources at the end, and do not use one weak source to support a whole paragraph of strong judgment.
 5. Formulas and numbers must clearly state variables, units, calculation basis, time range, and applicable conditions.
 6. Tables must serve comparison, classification, evidence matrix, or timeline functions; no decorative tables.
-7. Remove AI tone: delete empty transitions, excessive politeness, grand but unverifiable adjectives. Keep concrete facts, differences, trade-offs, limitations, and judgments.
+7. Remove AI tone: delete empty transitions, excessive politeness, and grand but unverifiable adjectives. Keep concrete facts, differences, trade-offs, limitations, and judgments. Prefer precise transitions that reveal logic: because, however, therefore, under this scope.
 8. Finally, run Report QA: structure is clear, logic is continuous, citations are faithful, numbers are reliable, opposing views are covered, limitations are explicit, summary can be read independently.

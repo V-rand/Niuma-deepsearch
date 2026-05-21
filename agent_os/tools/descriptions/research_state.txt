@@ -1,0 +1,22 @@
+Short-answer research control tool. Use this before repeated search when solving puzzle-like or multi-constraint questions.
+
+It externalizes the working state that should not live only in private reasoning and returns action cards for the next move:
+- active constraint
+- known facts already available
+- reasoning paths from known facts
+- candidates and their matched / failed / missing hard constraints
+- evidence verdicts
+- no-progress rounds and failed pivots
+
+Typical flow:
+1. start with question_model
+2. focus_constraint before searching
+3. inventory_known_facts before web_search when the constraint may be solved by reasoning
+4. update_candidate / add_evidence after tools or reasoning
+5. round_update after each research round
+6. analyze_constraint when a clue needs reasoning rather than broad search
+7. next_action to get control signals before searching again
+
+If next_action returns must_inventory_known_facts, do not search yet. First list what is already known about the active candidate/constraint and possible reasoning paths.
+
+If action_card blocks web_search/web_read, follow the card first. It is designed to turn "think harder" into a concrete reasoning task.

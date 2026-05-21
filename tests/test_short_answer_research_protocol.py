@@ -23,6 +23,9 @@ def test_agent_system_includes_short_answer_research_protocol():
     assert "Citation Rules" in prompt
     assert "Anti-AI-Tone Editing" in prompt
     assert "Formula and Number Rules" in prompt
+    assert "research_state" in prompt
+    assert "analyze_constraint" in prompt
+    assert "action_card" in prompt
 
 
 def test_deep_research_protocol_is_not_a_loadable_skill():
@@ -58,6 +61,20 @@ def test_persistent_prompts_absorb_short_answer_research_discipline():
     assert "Report Style Preferences" in memory
 
 
+def test_constraint_reasoning_skill_is_discoverable():
+    from agent_os.skills.loader import SkillLoader
+
+    loader = SkillLoader()
+    loader.discover_all()
+    skill = loader.resolve_skill("constraint_reasoning")
+
+    assert skill is not None
+    body = loader.get_skill_body("constraint_reasoning") or ""
+    assert "associative" in body
+    assert "linguistic" in body
+    assert "geographic" in body
+
+
 def test_default_memory_template_is_research_oriented(tmp_path):
     from agent_os.core.session import SessionManager
 
@@ -69,3 +86,13 @@ def test_default_memory_template_is_research_oriented(tmp_path):
     assert "Candidate Ledger" in memory
     assert "Evidence Ledger" in memory
     assert "Update Conditions" in memory
+
+
+def test_workspace_md_is_not_default_dynamic_entrypoint(tmp_path):
+    from agent_os.core.session import SessionManager
+
+    manager = SessionManager(data_dir=str(tmp_path))
+    created = asyncio.run(manager.create(name="memory-entrypoint"))
+
+    assert not Path(created.work_dir, "workspace.md").exists()
+    assert Path(created.work_dir, "MEMORY.md").exists()

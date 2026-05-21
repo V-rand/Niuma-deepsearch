@@ -271,6 +271,7 @@ class AgentLoop:
                 final_content: str | None = None
                 forced_final_turn = False
                 consecutive_tool_rounds = 0
+                consecutive_blind_search_rounds = 0
                 state = _LoopState(messages=messages)
                 while iteration < effective_max_iterations:
                     iteration += 1
@@ -382,6 +383,28 @@ class AgentLoop:
                         break
 
                     consecutive_tool_rounds += 1
+
+                    blocked_by_research_guardrail, guardrail_reminder, consecutive_blind_search_rounds, guardrail_hint = self._research_search_guardrail(
+                        tool_calls,
+                        consecutive_blind_search_rounds=consecutive_blind_search_rounds,
+                        messages=messages,
+                    )
+                    if guardrail_hint:
+                        yield {
+                            "type": "activity",
+                            "phase": "research.guardrail_hint",
+                            "detail": guardrail_hint,
+                            "payload": {"iteration": iteration, "tools": [tc["name"] for tc in tool_calls]},
+                        }
+                    if blocked_by_research_guardrail:
+                        yield {
+                            "type": "activity",
+                            "phase": "research.guardrail",
+                            "detail": "连续检索缺少 research_state 进展，已要求先更新研究状态",
+                            "payload": {"iteration": iteration, "tools": [tc["name"] for tc in tool_calls]},
+                        }
+                        state.transition = "research_guardrail"
+                        continue
 
                     async for evt in self._persist_assistant_tool_call(session_id, tool_calls, output_text, reasoning_text, iteration, messages):
                         yield evt
@@ -597,6 +620,51 @@ class AgentLoop:
                     continue
                 raise
         return None, events
+
+    @staticmethod
+    def _research_search_guardrail(
+        tool_calls: list[dict[str, Any]],
+        *,
+        consecutive_blind_search_rounds: int,
+        messages: list[dict[str, Any]],
+    ) -> tuple[bool, str, int, str]:
+        names = {str(tc.get("name", "")) for tc in tool_calls}
+        search_names = {"web_search", "web_read"}
+        has_search = bool(names & search_names)
+        if "research_state" in names and has_search:
+            reminder = (
+                "<system-reminder>\n"
+                "Runtime research guardrail: Call research_state separately before retrieval. "
+                "Do not batch research_state with web_search/web_read; first get the action_card, "
+                "then decide whether retrieval is still needed.\n"
+                "</system-reminder>"
+            )
+            messages.append({"role": "user", "content": reminder})
+            return True, reminder, 0, ""
+        if "research_state" in names:
+            return False, "", 0, ""
+        if not has_search:
+            return False, "", consecutive_blind_search_rounds, ""
+        next_count = consecutive_blind_search_rounds + 1
+        if next_count == 2:
+            return (
+                False,
+                "",
+                next_count,
+                "连续检索已进行 2 轮；如果当前约束仍未推进，下一步应调用 research_state.next_action 或 analyze_constraint。",
+            )
+        if consecutive_blind_search_rounds >= 3:
+            reminder = (
+                "<system-reminder>\n"
+                "Runtime research guardrail: you are about to run another web_search/web_read round "
+                "without updating research_state. Stop blind searching. First call research_state with "
+                "operation=\"next_action\", operation=\"analyze_constraint\", or operation=\"inventory_known_facts\" for the active constraint. "
+                "State the expected gain before searching again.\n"
+                "</system-reminder>"
+            )
+            messages.append({"role": "user", "content": reminder})
+            return True, reminder, consecutive_blind_search_rounds, ""
+        return False, "", next_count, ""
 
     @staticmethod
     def _content_filter_retry_kwargs(request_kwargs: dict[str, Any]) -> tuple[dict[str, Any], int]:
