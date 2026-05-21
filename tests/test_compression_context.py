@@ -49,8 +49,6 @@ async def test_compression_does_not_duplicate_current_user_message(tmp_path, mon
             await osys.sessions.add_message(session.id, "assistant", f"old assistant {index}", kind="chat")
 
         osys.agent_loop._CONTEXT_TOKEN_THRESHOLD = 1
-        osys.agent_loop._COMPRESS_HEAD_TURNS = 1
-        osys.agent_loop._COMPRESS_TAIL_TURNS = 1
         monkeypatch.setattr(osys.agent_loop, "_generate_compression_summary", fake_summary)
         monkeypatch.setattr(osys.agent_loop, "_request_model_with_retry", fake_request)
 

@@ -82,8 +82,6 @@ class AgentLoop:
         self.request_timeout_seconds = settings.model_timeout_seconds
         self.max_iterations = settings.max_iterations
         self._CONTEXT_TOKEN_THRESHOLD = settings.context_token_threshold
-        self._COMPRESS_HEAD_TURNS = settings.compress_head_turns
-        self._COMPRESS_TAIL_TURNS = settings.compress_tail_turns
         self._preserve_recent_tokens = settings.preserve_recent_tokens
         self._reasoning_effort = settings.reasoning_effort
         self._provider = settings.provider
@@ -95,6 +93,7 @@ class AgentLoop:
         # the core prefix stays cacheable. Accuracy to the day is sufficient; precise
         # time can be obtained via bash date command when needed.
         self._session_start_time = datetime.now()
+        self._last_prompt_tokens: dict[str, int] = {}
 
         self.client = AsyncOpenAI(api_key=self.api_key, base_url=self.base_url,
                                   timeout=self.request_timeout_seconds, max_retries=0)
@@ -353,6 +352,8 @@ class AgentLoop:
                     latency_ms = parsed["latency_ms"]
 
                     yield self._format_model_completed_event(usage_dict, latency_ms, iteration, reasoning_text)
+                    if usage_dict:
+                        self._last_prompt_tokens[session_id] = usage_dict.get("prompt_tokens", 0) or 0
 
                     # Decide: final answer or tool calls
                     if not tool_calls:
@@ -613,6 +614,30 @@ class AgentLoop:
             break
         if not stripped:
             return request_kwargs, 0
+        # Ensure the last assistant's tool_calls have complete tool responses.
+        # Partial stripping can leave orphan tool messages or a truncated
+        # tool_calls group — walk backward and fix any broken pairing.
+        for idx in range(len(retry_messages) - 1, -1, -1):
+            msg = retry_messages[idx]
+            if msg.get("role") != "assistant":
+                continue
+            tcs = msg.get("tool_calls")
+            if not tcs:
+                continue
+            # Count tool messages that follow this assistant
+            tool_count = 0
+            for j in range(idx + 1, len(retry_messages)):
+                if retry_messages[j].get("role") == "tool":
+                    tool_count += 1
+                else:
+                    break
+            if tool_count == 0 or tool_count < len(tcs):
+                # Incomplete group — remove remaining tool messages + this assistant
+                del retry_messages[idx:]
+                stripped = len(messages) - len(retry_messages)
+            break
+        if not stripped:
+            return request_kwargs, 0
         return {**request_kwargs, "messages": retry_messages}, stripped
 
     @staticmethod
@@ -660,8 +685,8 @@ class AgentLoop:
             tt = usage_dict.get("total_tokens", 0) or 0
             cached = usage_dict.get("cached_tokens", 0) or 0
             cache_rate = round(cached / pt * 100, 1) if pt > 0 else 0
-            pct = round(tt / self._CONTEXT_TOKEN_THRESHOLD * 100, 1) if self._CONTEXT_TOKEN_THRESHOLD else 0
-            usage_text = f" | tokens: prompt {pt:,} + output {ct:,} = total {tt:,} (缓存 {cache_rate}% / 压缩阈值 {pct}%)"
+            pct = round(pt / self._CONTEXT_TOKEN_THRESHOLD * 100, 1) if self._CONTEXT_TOKEN_THRESHOLD else 0
+            usage_text = f" | tokens: {pt:,} → {ct:,} = {tt:,} (缓存 {cache_rate}% / 阈值 {self._CONTEXT_TOKEN_THRESHOLD:,} 已用 {pct}%)"
         return {
             "type": "activity",
             "phase": "model.completed",
@@ -1261,6 +1286,12 @@ class AgentLoop:
         head_messages = messages[1:tail_start]  # skip system prompt
         tail_messages = messages[tail_start:] if tail_start < len(messages) else []
 
+        # Drop orphaned tool messages at head of tail — their preceding
+        # assistant(tool_calls) was compressed away and the API requires
+        # every tool message be preceded by a matching assistant message.
+        while tail_messages and tail_messages[0].get("role") == "tool":
+            tail_messages.pop(0)
+
         if not head_messages:
             # All messages fit in tail budget OR tail budget exceeded by first checked message.
             # If we're still over threshold, compress everything except system prompt.
@@ -1268,6 +1299,9 @@ class AgentLoop:
                 return None, None  # too few messages to compress
             head_messages = messages[1:]
             tail_messages = []
+
+        # Strip verbose tool content from head before feeding to compression LLM
+        await self._strip_verbose_tool_content(head_messages, session_id)
 
         serialized = self._serialize_for_summary(head_messages)
         summary_xml = await self._generate_compression_summary(serialized, previous_summary=previous_summary)
@@ -1511,8 +1545,9 @@ class AgentLoop:
                     messages.append({"role": "user", "content": nudge})
                     yield {"type": "activity", "phase": "todo.nudged", "detail": f"注入 {len(active)} 个活跃待办提醒"}
 
-        # -- 5. Proactive compression -------------------------------------------
-        if estimate_messages_tokens(messages) > self._CONTEXT_TOKEN_THRESHOLD:
+        # -- 5. Proactive compression (strip head + LLM) --------------------
+        estimated = self._last_prompt_tokens.get(session_id, 0) or estimate_messages_tokens(messages)
+        if estimated > self._CONTEXT_TOKEN_THRESHOLD:
             async for evt in self._compress_session_context_flow(session_id, messages, system_prompt, user_message):
                 yield evt
 
@@ -1654,6 +1689,96 @@ class AgentLoop:
             title=Path(path).name, summary=f"Archived {tool_name} result", metadata=metadata,
         )
         return path
+
+    async def _strip_verbose_tool_content(self, messages: list[dict], session_id: str) -> int:
+        """Replace verbose tool result content with local file references.
+        Content is already archived to raw_search/ — just point to its path.
+        Returns approximate tokens saved."""
+        session = await self.sessions.get(session_id)
+        if not session or not session.work_dir:
+            return 0
+
+        total_saved_chars = 0
+        total_stripped = 0
+
+        for msg in messages:
+            if msg.get("role") != "tool":
+                continue
+            content = msg.get("content", "")
+            if not isinstance(content, str) or len(content) < 2000:
+                continue
+
+            json_text = content
+            for tag in ("<workspace_artifact_reminder>", "<context_update_reminder>"):
+                pos = content.find(tag)
+                if pos >= 0:
+                    json_text = content[:pos]
+                    break
+
+            try:
+                data = json.loads(json_text)
+            except json.JSONDecodeError:
+                continue
+
+            if not isinstance(data, dict) or not data.get("success"):
+                continue
+            inner = data.get("data")
+            if not isinstance(inner, dict):
+                continue
+            if inner.get("_stripped"):
+                continue
+
+            new_inner = None
+
+            # web_read: full page content
+            page_content = inner.get("content", "")
+            if isinstance(page_content, str) and len(page_content) > 2000:
+                new_inner = {
+                    "url": inner.get("url", ""),
+                    "parser": inner.get("parser", ""),
+                    "archived_path": inner.get("archived_path", ""),
+                    "_stripped": True,
+                }
+                ap = inner.get("archived_path", "")
+                if ap:
+                    new_inner["_archive_path"] = ap
+                    new_inner["_archive_note"] = "使用 file_read 读取原内容"
+                rr = inner.get("reuse_reminder", "")
+                if rr:
+                    new_inner["reuse_reminder"] = rr
+
+            # web_search: many results
+            if new_inner is None:
+                results = inner.get("results")
+                query = inner.get("query", "")
+                if query and isinstance(results, list) and len(results) > 3:
+                    new_inner = {
+                        "query": query,
+                        "count": inner.get("count", len(results)),
+                        "titles": [r.get("title", "") for r in results],
+                        "urls": [r.get("url", "") for r in results],
+                        "archived_path": inner.get("archived_path", ""),
+                        "_stripped": True,
+                    }
+                    ap = inner.get("archived_path", "")
+                    if ap:
+                        new_inner["_archive_path"] = ap
+                        new_inner["_archive_note"] = "使用 file_read 读取原内容"
+                    rr = inner.get("reuse_reminder", "")
+                    if rr:
+                        new_inner["reuse_reminder"] = rr
+
+            if new_inner is not None:
+                old_len = len(content)
+                data["data"] = new_inner
+                msg["content"] = json.dumps(data, ensure_ascii=False)
+                total_saved_chars += old_len - len(msg["content"])
+                total_stripped += 1
+
+        if total_stripped > 0:
+            logger.info("Stripped %d verbose tool results (~%d chars) for session %s",
+                        total_stripped, total_saved_chars, session_id[:8])
+        return total_saved_chars // 4
 
     async def _save_filtered_tool_result(self, tool_content: str, tool_name: str, session_id: str) -> None:
         """Save filtered/compressed tool result to raw_search/ for debug audit.

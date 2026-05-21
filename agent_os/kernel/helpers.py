@@ -324,13 +324,13 @@ def reconstruct_messages_from_db(db_messages: list[dict[str, Any]], *, need_reas
 # ---------------------------------------------------------------------------
 
 def estimate_text_tokens(text: str) -> int:
-    """CJK ~1.5 tokens/char, ASCII ~0.25 tokens/char."""
+    """CJK ~0.6 tokens/char, ASCII ~0.3 tokens/char (DeepSeek tokenizer)."""
     if not text:
         return 0
     cjk_count = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
     ascii_count = sum(1 for ch in text if ch.isascii())
     other_count = len(text) - cjk_count - ascii_count
-    return int(cjk_count * 1.5 + ascii_count * 0.25 + other_count * 1.0)
+    return int(cjk_count * 0.6 + ascii_count * 0.3 + other_count * 1.0)
 
 
 def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:

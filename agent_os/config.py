@@ -107,10 +107,8 @@ class Settings:
     workspace_files: dict[str, str] = field(default_factory=lambda wf=_ws_files: dict(wf))
 
     # --- context & compression (from config.yaml) ---
-    context_token_threshold: int = _y("context_token_threshold", 250000)
-    compress_head_turns: int = _y("compress_head_turns", 3)
-    compress_tail_turns: int = _y("compress_tail_turns", 6)
-    preserve_recent_tokens: int = _y("preserve_recent_tokens", 4000)
+    context_token_threshold: int = _y("context_token_threshold", 600000)
+    preserve_recent_tokens: int = _y("preserve_recent_tokens", 8000)
     max_context_messages: int = _y("max_context_messages", 8)
     max_context_items: int = _y("max_context_items", 12)
 

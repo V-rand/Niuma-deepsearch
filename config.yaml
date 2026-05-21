@@ -89,10 +89,8 @@ tool_output_limits:
 # ---------------------------------------------------------------------------
 # 上下文与压缩
 # ---------------------------------------------------------------------------
-context_token_threshold: 250000   # 触发压缩的 token 阈值
-compress_head_turns: 3            # 压缩保留的头部回合数
-compress_tail_turns: 6            # 压缩保留的尾部回合数
-preserve_recent_tokens: 4000      # 压缩时保留的最近消息 token 预算
+context_token_threshold: 600000   # 触发压缩的 token 阈值（DeepSeek API prompt_tokens 真实值）
+preserve_recent_tokens: 8000      # 压缩时保留的最近消息 token 预算
 max_context_messages: 8           # 编译 system prompt 时摄入的最近消息数
 max_context_items: 12             # 编译 system prompt 时摄入的检索结果条数
 
