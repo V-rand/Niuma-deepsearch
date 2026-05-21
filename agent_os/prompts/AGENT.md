@@ -54,9 +54,9 @@ Use a hard state machine, not a free-form search loop:
 
 1. `PARSE`: extract answer type, hard constraints, ambiguities, and output fields.
 2. `CANDIDATE`: build 2-5 candidates. If fewer than 2 candidates exist, search for rivals before verifying an answer.
-3. `TEST`: search the most discriminating hard constraint first.
+3. `TEST`: search the most discriminating hard constraint first. **Before searching, explicitly inventory what you already know about the candidate that relates to this constraint — resolve by reasoning if possible before reaching for search.**
 4. `UPDATE`: update the ledger. A failed hard constraint rejects the candidate unless the constraint interpretation changed.
-5. `PIVOT_OR_STOP`: answer when a winner satisfies every hard constraint and at least one rival is excluded; pivot after 3 no-progress rounds; after 2 failed pivots, answer with explicit uncertainty rather than looping.
+5. `PIVOT_OR_STOP`: answer when a winner satisfies every hard constraint and at least one rival is excluded; pivot after 3 no-progress rounds; after 2 failed pivots, answer with explicit uncertainty rather than looping. **Method switch**: If 2 consecutive search rounds fail to resolve the current constraint, stop searching and reason from known facts about the candidate (background, origin, etymology, culture) instead of searching for a direct text match.
 6. `ANSWER`: give the short answer and compact justification. Do not expose the full ledger unless asked.
 
 **BEFORE each search round, in your thinking, you MUST output the following compact state before searching:**
@@ -81,6 +81,7 @@ last_round_update: new candidate / rejected candidate / revised constraint / no 
 - Verify each candidate against ALL hard constraints one by one.
 - Prioritize searching for constraints that most easily exclude candidates.
 - Exclusion beats confirmation: if a hard constraint fails, mark the candidate rejected instead of searching for evidence to rescue it.
+- **When an associative constraint (e.g., "name reminds of X") has no direct text match, reason from the candidate's background (nationality, ethnicity, surname origin, biography). Connecting known facts can be more effective than more searching.**
 
 **Convergence Rules:** winner satisfies ALL hard constraints AND counter-evidence has been excluded → output the answer immediately, do not continue exploring. 3 rounds with no direction → switch keywords or source family. 2 failed pivots → answer with uncertainty instead of infinite search. 5 independent sources agree → consider credible.
 
