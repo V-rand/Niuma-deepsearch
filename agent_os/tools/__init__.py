@@ -12,7 +12,7 @@ def register_all(r: ToolRegistry | None = None) -> ToolRegistry:
     """Register all built-in tools and plugins into *r* (or the global registry)."""
     if r is None:
         r = get_tool_registry()
-    from . import base_tools, web, search, skills, academic, media, research, openalex
+    from . import base_tools, web, search, skills, academic, media, research, openalex, pubmed
     base_tools.register_base_tools(r)
     web.register_web_tools(r)
     search.register_search_tools(r)
@@ -21,6 +21,7 @@ def register_all(r: ToolRegistry | None = None) -> ToolRegistry:
     media.register_media_tools(r)
     research.register_research_tools(r)
     openalex.register_openalex_tools(r)
+    pubmed.register_pubmed_tools(r)
     from .plugins import discover_plugins
     n = discover_plugins(r)
     if n:
