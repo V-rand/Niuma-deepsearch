@@ -183,12 +183,34 @@ class SubAgent:
                     request_kwargs["tool_choice"] = "auto"
                     request_kwargs["parallel_tool_calls"] = True
                 try:
-                    response = await asyncio.wait_for(
-                        self.client.chat.completions.create(**request_kwargs),
-                        timeout=self.request_timeout_seconds,
+                    model_task = asyncio.create_task(
+                        self.client.chat.completions.create(**request_kwargs)
                     )
+                    wait_tasks = [model_task]
+                    if self.interrupt_check:
+                        wait_tasks.append(asyncio.create_task(self.interrupt_check.wait()))
+                    if self._child_interrupt:
+                        wait_tasks.append(asyncio.create_task(self._child_interrupt.wait()))
+                    done, pending = await asyncio.wait(
+                        wait_tasks, timeout=self.request_timeout_seconds, return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    for t in pending:
+                        t.cancel()
+                    if model_task not in done:
+                        model_task.cancel()
+                        if any(t in done for t in wait_tasks[1:]):
+                            raise InterruptedError
+                        raise RuntimeError(f"Model request timed out after {self.request_timeout_seconds} seconds")
+                    response = model_task.result()
                 except asyncio.TimeoutError as exc:
                     raise RuntimeError(f"Model request timed out after {self.request_timeout_seconds} seconds") from exc
+                except asyncio.CancelledError:
+                    raise
+                if ((self.interrupt_check and self.interrupt_check.is_set())
+                    or (self._child_interrupt and self._child_interrupt.is_set())):
+                    self._write_status(iteration, ["*interrupted*"], "收到中断信号", status="interrupted", phase="run.interrupted")
+                    await self._notify_parent("killed", "[任务被中断]")
+                    return "[任务被中断]"
                 assistant_message = response.choices[0].message
                 output_text = extract_message_content(assistant_message.content)
                 tool_calls = []

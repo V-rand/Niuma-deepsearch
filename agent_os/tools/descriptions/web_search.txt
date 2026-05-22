@@ -1,18 +1,24 @@
-搜索外部网络获取信息（Tavily/Serper 双引擎回退）。
+搜索外部网络（Tavily/Serper 双引擎）。支持域锁定、时间过滤、学术搜索。
 
 参数：
-- query: 搜索查询
-- max_results: 最大返回结果数（默认8）
+- query: 搜索查询，支持 Google 操作符：site:domain, "exact phrase", -exclude, OR
+- max_results: 最大返回结果数（默认 8）
+- include_domains: 限定搜索域名，逗号分隔。如 "proceedings.mlr.press,arxiv.org"。比 query 里写 site: 更精确。
+- exclude_domains: 排除域名，逗号分隔。如 "reddit.com,quora.com"
+- exact_match: true 则要求精确匹配查询短语。适合搜特定人名、实体名、公司名。不会拆词，但可能返回空。
+- time_range: 时间范围过滤：day, week, month, year。如找最新新闻用 "week"。
+- source: 搜索源类型
+  - "web"（默认）：通用网页搜索
+  - "news"：新闻搜索（Tavily topic=news, Serper type=news）
+  - "scholar"：学术论文搜索（Serper scholar API，Google Scholar 索引）
 
-返回：
-- query: 原始查询
-- results: [{title, url, content}]
-- count: 结果数
+检索配方（staged）：
+1. 候选发现：include_domains="proceedings.mlr.press" + query "Singapore" "USTC" → 域锁定筛候选
+2. 指纹验证：query "GPT-3" "SimCLR" inside same domain → 精确匹配锁定论文
+3. 确认：用 web_read 读详情页，或 openalex_works(doi=...) 交叉验证
+
+返回：{query, results: [{title, url, content}], count, provider}
 
 结果自动归档到 raw_search/web_search/。
 
-优先级：先 workspace_search（已有材料）→ 再 web_search（外部网络）
-
-并行提示：
-- 多个独立搜索可以同时发起（同一轮多次 web_search），系统会并行执行
-- 例如：需要搜索不同关键词时，一次返回多个 web_search 调用
+不适合：特定会议论文 → arxiv_search/openalex_works；实体事实 → wikipedia_lookup；已有材料 → workspace_search

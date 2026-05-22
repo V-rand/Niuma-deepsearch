@@ -734,29 +734,72 @@ class AgentLoop:
     @staticmethod
     def _prune_orphaned_tool_messages(msgs: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Ensure all assistant(tool_calls) ↔ tool pairs are closed.
-        Removes orphaned tools at start and incomplete tool_calls groups."""
+
+        This sanitizer is applied before model requests and during compaction.
+        It must handle malformed history anywhere in the list, not just tail.
+        """
         if not msgs:
             return msgs
-        result = list(msgs)
-        # Step 1: drop leading orphan tool messages
-        while result and result[0].get("role") == "tool":
-            result.pop(0)
-        # Step 2: find the last assistant with tool_calls and check its tools
-        last_tc = -1
-        for i in range(len(result) - 1, -1, -1):
-            if result[i].get("role") == "assistant" and result[i].get("tool_calls"):
-                last_tc = i
-                break
-        if last_tc >= 0:
-            tcs = result[last_tc].get("tool_calls")
-            tool_count = 0
-            for j in range(last_tc + 1, len(result)):
-                if result[j].get("role") == "tool":
-                    tool_count += 1
+
+        result: list[dict[str, Any]] = []
+        pending_start_idx: int | None = None
+        pending_ids: list[str | None] = []
+        pending_by_count = False
+        matched_count = 0
+        seen_ids: set[str] = set()
+
+        def finalize_pending_if_incomplete() -> None:
+            nonlocal pending_start_idx, pending_ids, pending_by_count, matched_count, seen_ids, result
+            if pending_start_idx is None:
+                return
+            expected_count = len(pending_ids)
+            complete = matched_count >= expected_count
+            if not complete:
+                del result[pending_start_idx:]
+            pending_start_idx = None
+            pending_ids = []
+            pending_by_count = False
+            matched_count = 0
+            seen_ids = set()
+
+        for msg in msgs:
+            role = msg.get("role")
+            if role == "assistant" and msg.get("tool_calls"):
+                finalize_pending_if_incomplete()
+                tcs = msg.get("tool_calls") or []
+                ids = [tc.get("id") for tc in tcs]
+                pending_by_count = any(not tid for tid in ids)
+                pending_ids = ids
+                pending_start_idx = len(result)
+                matched_count = 0
+                seen_ids = set()
+                result.append(msg)
+                continue
+
+            if role == "tool":
+                if pending_start_idx is None:
+                    continue
+                tcid = msg.get("tool_call_id")
+                if pending_by_count:
+                    result.append(msg)
+                    matched_count += 1
                 else:
-                    break
-            if tool_count < len(tcs):
-                del result[last_tc:]  # remove incomplete group
+                    if tcid and tcid in pending_ids and tcid not in seen_ids:
+                        result.append(msg)
+                        seen_ids.add(tcid)
+                        matched_count += 1
+                if matched_count >= len(pending_ids):
+                    pending_start_idx = None
+                    pending_ids = []
+                    pending_by_count = False
+                    matched_count = 0
+                    seen_ids = set()
+                continue
+
+            finalize_pending_if_incomplete()
+            result.append(msg)
+
+        finalize_pending_if_incomplete()
         return result
 
     @staticmethod

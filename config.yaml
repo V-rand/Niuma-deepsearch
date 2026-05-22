@@ -45,8 +45,9 @@ workspace:
 # ---------------------------------------------------------------------------
 # 全部可用工具：file_read, file_write, file_append, file_delete, file_list,
 #   file_grep, file_tree, workspace_search, law_retrieve, case_retrieve,
-#   web_search, web_read, upload_parse, bash, todowrite, reminder_create,
-#   spawn, skill_use
+#   web_search, web_read, arxiv_search, crossref_search, wikipedia_lookup,
+#   research_state, upload_parse, bash, todowrite, reminder_create, spawn,
+#   skill_use, skill_propose, question, send_msg, task_stop, edit
 # 不需要的工具写在这里，它们的 schema 不会发给模型：
 disabled_tools: []
 
@@ -103,7 +104,7 @@ mineru_poll_timeout_seconds: 180  # 整体解析超时（含轮询）
 # ---------------------------------------------------------------------------
 # 子 Agent
 # ---------------------------------------------------------------------------
-sub_agent_max_iterations: 32      # 子 agent 单次任务最大迭代步数
+sub_agent_max_iterations: 16      # 子 agent 单次任务最大迭代步数（降低避免无限搜索）
 
 # ---------------------------------------------------------------------------
 # 调度与提醒

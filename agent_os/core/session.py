@@ -224,7 +224,7 @@ class SessionManager:
             "created_at_display": format_local_timestamp(data.get("created_at")),
             "updated_at": data.get("updated_at", ""),
             "updated_at_display": format_local_timestamp(data.get("updated_at")),
-        } for row in rows]
+        } for row in rows if "__subagent_" not in (self.store.row_to_json(row) or {}).get("name", "")]
 
     async def list_active_sessions(self) -> list[Session]:
         rows = self.store.list_sessions_by_status("active")

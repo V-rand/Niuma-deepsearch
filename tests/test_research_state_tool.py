@@ -280,3 +280,46 @@ def test_constraint_reasoning_skill_exists():
     assert "associative" in text
     assert "linguistic" in text
     assert "geographic" in text
+
+
+def test_prune_orphaned_tool_messages_removes_incomplete_middle_group():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    msgs = [
+        {"role": "user", "content": "q1"},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "tc1", "function": {"name": "web_search", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "tc1", "content": "{}"},
+        {"role": "assistant", "content": "ok"},
+        {"role": "assistant", "content": "", "tool_calls": [{"id": "tc2", "function": {"name": "web_search", "arguments": "{}"}}]},
+        {"role": "user", "content": "q2"},
+    ]
+
+    pruned = loop._prune_orphaned_tool_messages(msgs)
+    assert [m["role"] for m in pruned] == ["user", "assistant", "tool", "assistant", "user"]
+    assert all(
+        not (
+            m.get("role") == "assistant"
+            and any(tc.get("id") == "tc2" for tc in (m.get("tool_calls") or []))
+        )
+        for m in pruned
+    )
+
+
+def test_prune_orphaned_tool_messages_drops_orphan_tools_and_keeps_complete_groups():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    msgs = [
+        {"role": "tool", "tool_call_id": "orphan", "content": "{}"},
+        {"role": "assistant", "content": "", "tool_calls": [
+            {"id": "tc3", "function": {"name": "web_search", "arguments": "{}"}},
+            {"id": "tc4", "function": {"name": "web_read", "arguments": "{}"}},
+        ]},
+        {"role": "tool", "tool_call_id": "tc3", "content": "{}"},
+        {"role": "tool", "tool_call_id": "tc4", "content": "{}"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+    pruned = loop._prune_orphaned_tool_messages(msgs)
+    assert [m["role"] for m in pruned] == ["assistant", "tool", "tool", "assistant"]
