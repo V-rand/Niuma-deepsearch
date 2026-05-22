@@ -21,6 +21,7 @@ from ..config import Settings
 from ..memory import ContextCompiler, WorkspaceMemory
 from ..skills.loader import SkillLoader
 from ..tools.registry import ToolRegistry, ToolResult, get_tool_registry, set_session_context
+from ..tools.research import enforce_research_state_action_card
 from .result_filter import ResultFilterAgent, _PRUNE_CHAR_THRESHOLD
 from .helpers import (
     format_exception,
@@ -290,6 +291,7 @@ class AgentLoop:
                 forced_final_turn = False
                 consecutive_tool_rounds = 0
                 consecutive_blind_search_rounds = 0
+                guardrail_hint_count = 0
                 state = _LoopState(messages=messages)
                 while iteration < effective_max_iterations:
                     iteration += 1
@@ -408,17 +410,50 @@ class AgentLoop:
                         messages=messages,
                     )
                     if guardrail_hint:
+                        guardrail_hint_count += 1
                         yield {
                             "type": "activity",
                             "phase": "research.guardrail_hint",
                             "detail": guardrail_hint,
                             "payload": {"iteration": iteration, "tools": [tc["name"] for tc in tool_calls]},
                         }
+                    # Escalate: 2+ hints without research_state → hard block
+                    if not blocked_by_research_guardrail and guardrail_hint_count >= 2:
+                        messages.append({"role": "user", "content": (
+                            "<system-reminder>\n"
+                            "Runtime research guardrail: you have received repeated hints to update "
+                            "research_state but have not done so. This is a hard stop. "
+                            "Call research_state(operation=\"working_notes\", \"retrieval_plan\", "
+                            "\"next_action\", or \"analyze_constraint\") "
+                            "before any further retrieval.\n"
+                            "</system-reminder>"
+                        )})
+                        yield {
+                            "type": "activity",
+                            "phase": "research.guardrail",
+                            "detail": "多次提示仍不调用 research_state，已拦截",
+                            "payload": {"iteration": iteration, "tools": [tc["name"] for tc in tool_calls]},
+                        }
+                        state.transition = "research_guardrail"
+                        continue
                     if blocked_by_research_guardrail:
                         yield {
                             "type": "activity",
                             "phase": "research.guardrail",
                             "detail": "连续检索缺少 research_state 进展，已要求先更新研究状态",
+                            "payload": {"iteration": iteration, "tools": [tc["name"] for tc in tool_calls]},
+                        }
+                        state.transition = "research_guardrail"
+                        continue
+
+                    # Enforce research_state action_card tool restrictions
+                    action_card_blocked, action_card_reminder = self._enforce_research_action_card(tool_calls, session)
+                    if action_card_blocked:
+                        messages.append({"role": "user", "content": action_card_reminder})
+                        yield {
+                            "type": "activity",
+                            "phase": "research.guardrail",
+                            "detail": "当前研究阶段禁止调用外部检索工具",
                             "payload": {"iteration": iteration, "tools": [tc["name"] for tc in tool_calls]},
                         }
                         state.transition = "research_guardrail"
@@ -477,6 +512,9 @@ class AgentLoop:
                             session = refreshed
                     else:
                         consecutive_tool_rounds += 1
+
+                    if any(tc["name"] == "research_state" for tc in tool_calls):
+                        guardrail_hint_count = 0
 
                     state.transition = "next_turn"  # implicit continue → next while iteration
 
@@ -675,25 +713,35 @@ class AgentLoop:
         if not has_retrieval:
             return False, "", consecutive_blind_search_rounds, ""
         next_count = consecutive_blind_search_rounds + 1
-        if next_count == 2:
+        if next_count == 3:
             return (
                 False,
                 "",
                 next_count,
-                "连续检索已进行 2 轮；如果当前约束仍未推进，下一步应调用 research_state.next_action 或 analyze_constraint。",
+                "连续检索已进行 3 轮；如果当前约束仍未推进，下一步应调用 research_state.working_notes 更新 active_goal/failed_paths/next_move，或调用 next_action/analyze_constraint。",
             )
-        if consecutive_blind_search_rounds >= 3:
+        if consecutive_blind_search_rounds >= 5:
             reminder = (
                 "<system-reminder>\n"
                 "Runtime research guardrail: you are about to run another retrieval round "
                 "without updating research_state. Stop blind searching. First call research_state with "
-                "operation=\"next_action\", operation=\"analyze_constraint\", or operation=\"inventory_known_facts\" for the active constraint. "
-                "State the expected gain before searching again.\n"
+                "operation=\"working_notes\", operation=\"retrieval_plan\", operation=\"next_action\", "
+                "or operation=\"analyze_constraint\" for the active constraint. State failed_paths and "
+                "the expected gain before searching again.\n"
                 "</system-reminder>"
             )
             messages.append({"role": "user", "content": reminder})
             return True, reminder, consecutive_blind_search_rounds, ""
         return False, "", next_count, ""
+
+    def _enforce_research_action_card(
+        self,
+        tool_calls: list[dict[str, Any]],
+        session,
+    ) -> tuple[bool, str | None]:
+        work_dir = session.work_dir if session else None
+        tool_names = [tc["name"] for tc in tool_calls]
+        return enforce_research_state_action_card(work_dir, tool_names)
 
     def _is_external_retrieval_tool(self, tool_name: str) -> bool:
         if tool_name == "workspace_search":
@@ -1200,6 +1248,57 @@ class AgentLoop:
         lines.append("\nCall todowrite to update status if tasks are done.")
         lines.append("</system-reminder>")
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_calm_nudge(iteration: int) -> str | None:
+        if iteration == 8:
+            return (
+                "<system-reminder>\n"
+                "This is a complex task and it is normal to take time. "
+                "Do not rush to an answer — stay with your method: "
+                "check premises, verify each constraint step by step, "
+                "and let evidence drive conclusions, not the clock.\n"
+                "Re-read your loaded skills and the system prompt now. "
+                "Are you following every gate and rule they specify?\n"
+                "</system-reminder>"
+            )
+        if iteration == 15:
+            return (
+                "<system-reminder>\n"
+                "Still working — this is fine. Long sessions are expected "
+                "for hard problems. Maintain your methodical process. "
+                "If stuck, the problem is almost certainly a wrong premise "
+                "or weak candidate set, not a missing keyword. "
+                "Review your core assumptions before searching more.\n"
+                "Pause and re-read the convergence rules and state machine "
+                "gates in your active skills. Which gate are you at? "
+                "Are you skipping one?\n"
+                "</system-reminder>"
+            )
+        if iteration == 22:
+            return (
+                "<system-reminder>\n"
+                "Deep into the session. Now more than ever: stay calm and systematic. "
+                "Do not grab at answers out of frustration. "
+                "Re-read your system prompt and skill constraints — "
+                "you may be violating a gate or rule you forgot about. "
+                "If you have a winner that satisfies all hard constraints, output it. "
+                "If not, identify which premise is weakest and verify it. "
+                "Random search will not help at this stage.\n"
+                "</system-reminder>"
+            )
+        if iteration >= 30 and iteration % 6 == 0:
+            return (
+                "<system-reminder>\n"
+                "Extended session. Your method is your lifeline — do not abandon it. "
+                "Re-read the system prompt and every active skill constraint now. "
+                "Then review your candidate ledger, identify the single most uncertain "
+                "premise, and verify or falsify it with one targeted search. "
+                "If no candidate satisfies all hard constraints, state the best answer "
+                "with uncertainty rather than continuing a random walk.\n"
+                "</system-reminder>"
+            )
+        return None
 
     # ------------------------------------------------------------------
     # Session context cache
@@ -1743,7 +1842,13 @@ class AgentLoop:
                     messages.append({"role": "user", "content": nudge})
                     yield {"type": "activity", "phase": "todo.nudged", "detail": f"注入 {len(active)} 个活跃待办提醒"}
 
-        # -- 5. Proactive compression (strip head + LLM) --------------------
+        # -- 5. Calm-check (prevents anxiety-driven sloppiness in long sessions)
+        calm_message = self._format_calm_nudge(iteration)
+        if calm_message:
+            messages.append({"role": "user", "content": calm_message})
+            yield {"type": "activity", "phase": "calm.nudged", "detail": "注入冷静提醒"}
+
+        # -- 6. Proactive compression (strip head + LLM) --------------------
         estimated = self._last_prompt_tokens.get(session_id, 0) or estimate_messages_tokens(messages)
         if estimated > self._CONTEXT_TOKEN_THRESHOLD:
             async for evt in self._compress_session_context_flow(session_id, messages, system_prompt, user_message):

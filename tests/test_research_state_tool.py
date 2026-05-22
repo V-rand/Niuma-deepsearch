@@ -85,6 +85,13 @@ def test_research_state_tool_is_registered(tmp_path, monkeypatch):
     try:
         schema_names = [schema["function"]["name"] for schema in osys.list_tool_schemas()]
         assert "research_state" in schema_names
+        research_schema = next(schema for schema in osys.list_tool_schemas() if schema["function"]["name"] == "research_state")
+        props = research_schema["function"]["parameters"]["properties"]
+        assert "working_notes" in props["operation"]["enum"]
+        assert {
+            "question_type", "active_goal", "current_action", "known", "unknown",
+            "failed_paths", "evidence_target", "exit_condition", "next_move",
+        } <= set(props)
     finally:
         import asyncio
 
@@ -116,7 +123,48 @@ async def test_research_state_persists_to_session_research_file(tmp_path):
     assert restored.data["state"]["active_constraint"] == "constraint"
 
 
-def test_research_guardrail_blocks_after_four_blind_retrieval_rounds():
+@pytest.mark.asyncio
+async def test_research_state_records_compact_working_notes(tmp_path):
+    from agent_os.tools.registry import set_session_context
+    from agent_os.tools import research
+    from agent_os.tools.research import handle_research_state
+
+    session_id = "research-state-working-notes"
+    set_session_context(work_dir=str(tmp_path), session_id=session_id)
+
+    await handle_research_state(
+        operation="start",
+        question_model={"answer_type": "publication_name"},
+    )
+    recorded = await handle_research_state(
+        operation="working_notes",
+        question_type="literature_lookup",
+        active_goal="identify the paper venue",
+        current_action="search",
+        known=["20% census sample", "multinomial logistic regression"],
+        unknown=["journal name"],
+        failed_paths=["country-first broad web queries"],
+        evidence_target="paper satisfying census sample and multinomial logistic regression constraints",
+        exit_condition="candidate title and publication venue found or fingerprint family exhausted",
+        next_move="search high-entropy numeric/method fingerprint",
+    )
+
+    assert recorded.success
+    assert recorded.data["working_notes_recorded"] is True
+    notes = recorded.data["state"]["working_notes"]
+    assert notes["question_type"] == "literature_lookup"
+    assert notes["active_goal"] == "identify the paper venue"
+    assert notes["current_action"] == "search"
+    assert notes["failed_paths"] == ["country-first broad web queries"]
+    assert notes["evidence_target"] == "paper satisfying census sample and multinomial logistic regression constraints"
+    assert notes["exit_condition"] == "candidate title and publication venue found or fingerprint family exhausted"
+
+    research._states.pop(session_id, None)
+    restored = await handle_research_state(operation="next_action")
+    assert restored.data["state"]["working_notes"]["next_move"] == "search high-entropy numeric/method fingerprint"
+
+
+def test_research_guardrail_blocks_after_six_blind_retrieval_rounds():
     from agent_os.kernel.agent_loop import AgentLoop
 
     loop = AgentLoop.__new__(AgentLoop)
@@ -126,7 +174,8 @@ def test_research_guardrail_blocks_after_four_blind_retrieval_rounds():
     with_state = [{"name": "research_state", "arguments": {"operation": "next_action"}}]
 
     blind_rounds = 0
-    for call in [search, read, search]:
+    # hint fires on 3rd round (next_count==3), block on 6th (>=5)
+    for call in [search, read, search, read, search]:
         blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
             call,
             consecutive_blind_search_rounds=blind_rounds,
@@ -134,7 +183,7 @@ def test_research_guardrail_blocks_after_four_blind_retrieval_rounds():
         )
         assert blocked is False
         assert reminder == ""
-        if blind_rounds != 2:
+        if blind_rounds != 3:
             assert hint == ""
 
     blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
@@ -145,7 +194,7 @@ def test_research_guardrail_blocks_after_four_blind_retrieval_rounds():
     assert blocked is True
     assert "research_state" in reminder
     assert hint == ""
-    assert blind_rounds == 3
+    assert blind_rounds == 5
     assert messages[-1]["role"] == "user"
     assert "Runtime research guardrail" in messages[-1]["content"]
 
@@ -169,6 +218,8 @@ def test_research_guardrail_counts_structured_retrieval_tools():
         [{"name": "openalex_works", "arguments": {"title": "first"}}],
         [{"name": "pubmed_search", "arguments": {"query": "first"}}],
         [{"name": "opencitations_search", "arguments": {"doi": "10.123/test"}}],
+        [{"name": "crossref_search", "arguments": {"title": "first"}}],
+        [{"name": "web_search", "arguments": {"query": "first"}}],
     ]
 
     blind_rounds = 0
@@ -178,11 +229,11 @@ def test_research_guardrail_counts_structured_retrieval_tools():
             consecutive_blind_search_rounds=blind_rounds,
             messages=messages,
         )
-        assert blind_rounds == min(index, 3)
-        if index == 2:
+        assert blind_rounds == min(index, 5)
+        if index == 3:
             assert blocked is False
             assert "research_state" in hint
-        elif index == 4:
+        elif index == 6:
             assert blocked is True
             assert "another retrieval round" in reminder
         else:
@@ -302,7 +353,7 @@ async def test_research_state_analyzes_associative_constraint_with_action_card()
     assert "nationality / geography" in card["reasoning_lenses"]
     assert card["search_needed"] == "only_for_verification"
     assert card["search_policy"] == "associative_prefer_reasoning_after_first_failed_match"
-    assert "web_search" in card["blocked_next_tools"]
+    assert card["blocked_next_tools"] == []
 
 
 @pytest.mark.asyncio
@@ -353,8 +404,18 @@ def test_research_guardrail_hints_before_hard_block():
     )
     assert blocked is False
     assert reminder == ""
-    assert "research_state" in hint
+    assert hint == ""
     assert blind_rounds == 2
+
+    blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+        search,
+        consecutive_blind_search_rounds=blind_rounds,
+        messages=messages,
+    )
+    assert blocked is False
+    assert reminder == ""
+    assert "research_state" in hint
+    assert blind_rounds == 3
 
 
 def test_research_guardrail_blocks_mixed_state_and_retrieval_batch():
@@ -568,3 +629,229 @@ def test_prune_orphaned_tool_messages_drops_orphan_tools_and_keeps_complete_grou
 
     pruned = loop._prune_orphaned_tool_messages(msgs)
     assert [m["role"] for m in pruned] == ["assistant", "tool", "tool", "assistant"]
+
+
+def test_enforce_research_action_card_no_state_file_is_noop():
+    from agent_os.tools.research import enforce_research_state_action_card
+
+    blocked, reminder = enforce_research_state_action_card("/tmp/nonexistent", ["web_search"])
+    assert not blocked
+    assert reminder is None
+
+
+def test_enforce_research_action_card_no_blocked_tools_when_state_empty(tmp_path):
+    from agent_os.tools.research import enforce_research_state_action_card
+
+    state = {}
+    state_dir = tmp_path / "research"
+    state_dir.mkdir()
+    (state_dir / "research_state.json").write_text(json.dumps(state))
+
+    blocked, reminder = enforce_research_state_action_card(str(tmp_path), ["web_search"])
+    assert not blocked
+    assert reminder is None
+
+
+def test_enforce_research_action_card_does_not_hard_block_inventory_guidance(tmp_path):
+    from agent_os.tools.research import enforce_research_state_action_card
+
+    state = {
+        "question_model": {"answer_type": "entity", "hard_constraints": ["year clue"]},
+        "active_constraint": "year clue",
+        "active_constraint_type": "temporal",
+        "expected_gain": "find which entity matches",
+        "candidates": {},
+        "evidence": [],
+        "known_fact_inventory": {},
+        "reasoning_paths": {},
+        "no_progress_rounds": 0,
+        "failed_pivots": 0,
+        "last_progress": {},
+    }
+    state_dir = tmp_path / "research"
+    state_dir.mkdir()
+    (state_dir / "research_state.json").write_text(json.dumps(state))
+
+    blocked, reminder = enforce_research_state_action_card(str(tmp_path), ["web_search"])
+    assert not blocked, "inventory guidance should not hard-block candidate discovery retrieval"
+    assert reminder is None
+
+
+def test_enforce_research_action_card_allows_search_when_action_card_says_pivot(tmp_path):
+    from agent_os.tools.research import enforce_research_state_action_card
+
+    state = {
+        "question_model": {"answer_type": "entity", "hard_constraints": ["year clue"]},
+        "active_constraint": "year clue",
+        "candidates": {},
+        "evidence": [],
+        "known_fact_inventory": {"candidate1": ["fact1"]},
+        "reasoning_paths": {},
+        "no_progress_rounds": 0,
+        "failed_pivots": 1,
+        "last_progress": {"progress": False},
+    }
+    state_dir = tmp_path / "research"
+    state_dir.mkdir()
+    (state_dir / "research_state.json").write_text(json.dumps(state))
+
+    # failed_pivots=1 with known facts → next_action=pivot → web_search is allowed
+    blocked, reminder = enforce_research_state_action_card(str(tmp_path), ["web_search"])
+    assert not blocked, "should allow web_search during pivot phase"
+
+
+def test_enforce_research_action_card_blocks_all_retrieval_after_two_failed_pivots(tmp_path):
+    from agent_os.tools.research import enforce_research_state_action_card
+
+    state = {
+        "question_model": {"answer_type": "entity"},
+        "active_constraint": "year clue",
+        "candidates": {"candidate1": {"matched": [], "failed": [], "missing": ["year"], "status": "active"}},
+        "evidence": [],
+        "known_fact_inventory": {"candidate1": ["fact1"]},
+        "reasoning_paths": {},
+        "no_progress_rounds": 0,
+        "failed_pivots": 2,
+        "last_progress": {"progress": False},
+    }
+    state_dir = tmp_path / "research"
+    state_dir.mkdir()
+    (state_dir / "research_state.json").write_text(json.dumps(state))
+
+    blocked, reminder = enforce_research_state_action_card(str(tmp_path), ["web_search", "arxiv_search"])
+    assert blocked, "should block all retrieval after 2 failed pivots"
+    assert "answer_with_uncertainty" in reminder or "blocked" in reminder.lower()
+
+
+@pytest.mark.asyncio
+async def test_reset_blocks_retrieval_until_start():
+    from agent_os.tools.registry import set_session_context
+    from agent_os.tools.research import handle_research_state, enforce_research_state_action_card
+    import tempfile, os, json
+
+    with tempfile.TemporaryDirectory() as td:
+        work_dir = os.path.join(td, "work")
+        os.makedirs(work_dir)
+        set_session_context(work_dir=work_dir, session_id="reset-test")
+
+        # Normal start → retrieval is allowed (focus_constraint, blocked=[])
+        await handle_research_state(operation="start", question_model={"answer_type": "entity"})
+        blocked, _ = enforce_research_state_action_card(work_dir, ["web_search"])
+        assert not blocked, "before reset, retrieval should be allowed"
+
+        # Reset → after_reset flag set → retrieval BLOCKED
+        await handle_research_state(operation="reset")
+        blocked, reminder = enforce_research_state_action_card(work_dir, ["web_search"])
+        assert blocked, "after reset, retrieval must be blocked"
+        assert "restart_required" in reminder or "reset" in reminder.lower()
+
+        # start() clears after_reset → retrieval allowed again
+        await handle_research_state(operation="start", question_model={"answer_type": "entity"})
+        blocked, _ = enforce_research_state_action_card(work_dir, ["web_search"])
+        assert not blocked, "after start(), retrieval should be allowed again"
+
+
+@pytest.mark.asyncio
+async def test_reset_cleared_by_focus_constraint_then_inventory():
+    from agent_os.tools.registry import set_session_context
+    from agent_os.tools.research import handle_research_state, enforce_research_state_action_card
+    import tempfile, os
+
+    with tempfile.TemporaryDirectory() as td:
+        work_dir = os.path.join(td, "work")
+        os.makedirs(work_dir)
+        set_session_context(work_dir=work_dir, session_id="reset-fc-test")
+
+        await handle_research_state(operation="reset")
+        blocked, _ = enforce_research_state_action_card(work_dir, ["web_search"])
+        assert blocked, "after reset, retrieval blocked (restart_required)"
+
+        # focus_constraint clears after_reset; inventory guidance should not hard-block retrieval.
+        await handle_research_state(operation="focus_constraint", active_constraint="year clue")
+        blocked, reminder = enforce_research_state_action_card(work_dir, ["web_search"])
+        assert not blocked
+        assert reminder is None
+
+        # After inventory, normal flow resumes
+        await handle_research_state(operation="inventory_known_facts", known_facts=["year is 1899", "drug is aspirin"])
+        await handle_research_state(operation="round_update", progress=True)
+        blocked, _ = enforce_research_state_action_card(work_dir, ["web_search"])
+        assert not blocked, "after inventory + progress, discriminating_search allows retrieval"
+
+
+@pytest.mark.asyncio
+async def test_literature_discovery_goes_to_discriminating_search_without_inventory_gate():
+    from agent_os.tools.registry import set_session_context
+    from agent_os.tools.research import handle_research_state
+
+    set_session_context(work_dir="", session_id="literature-discovery-test")
+    await handle_research_state(
+        operation="start",
+        question_model={
+            "answer_type": "publication_name",
+            "hard_constraints": [
+                "paper published in the 2010s",
+                "approximately 1.7 million employed census sample",
+                "multinomial logistic regression",
+            ],
+        },
+    )
+    focused = await handle_research_state(
+        operation="focus_constraint",
+        active_constraint="identify the paper and publication from census/methodology constraints",
+    )
+
+    assert focused.data["next_action"] == "discriminating_search"
+    assert focused.data["control"]["literature_discovery"] is True
+    assert focused.data["control"]["must_inventory_known_facts"] is False
+    assert focused.data["action_card"]["search_needed"] == "yes"
+
+
+def test_guardrail_escalation_after_repeated_hints():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    messages = []
+    search = [{"name": "web_search", "arguments": {"query": "test"}}]
+
+    # Simulate hint escalation: track guardrail_hint_count manually
+    hint_count = 0
+    blind_rounds = 0
+
+    # Round 1-2: just build up counter (hint fires at round 3)
+    for _ in range(2):
+        blocked, _, blind_rounds, hint = loop._research_search_guardrail(
+            search, consecutive_blind_search_rounds=blind_rounds, messages=messages,
+        )
+        assert not blocked
+        if hint:
+            hint_count += 1
+    assert hint_count == 0
+    assert blind_rounds == 2
+
+    # Round 3: first hint fires
+    blocked, _, blind_rounds, hint = loop._research_search_guardrail(
+        search, consecutive_blind_search_rounds=blind_rounds, messages=messages,
+    )
+    assert not blocked
+    assert hint, "hint should fire at round 3"
+    hint_count += 1
+    assert hint_count == 1
+    assert blind_rounds == 3
+
+    # Round 4-5: more blind search (hint only fires at next_count==3, so rounds 4-5 no hint)
+    for _ in range(2):
+        blocked, _, blind_rounds, hint = loop._research_search_guardrail(
+            search, consecutive_blind_search_rounds=blind_rounds, messages=messages,
+        )
+        assert not blocked
+        if hint:
+            hint_count += 1
+    assert hint_count == 1  # no new hint since just the 1st hint round
+    assert blind_rounds == 5
+
+    # Round 6: hard block fires (>=5 blind rounds)
+    blocked, _, blind_rounds, hint = loop._research_search_guardrail(
+        search, consecutive_blind_search_rounds=blind_rounds, messages=messages,
+    )
+    assert blocked, "should hard block at 6th blind round"

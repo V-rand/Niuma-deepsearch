@@ -41,6 +41,9 @@ def _empty_state() -> dict[str, Any]:
         "failed_pivots": 0,
         "pivot_history": [],
         "last_progress": {},
+        "last_retrieval_plan": {},
+        "working_notes": {},
+        "after_reset": False,
     }
 
 
@@ -107,6 +110,8 @@ def _public_state(state: dict[str, Any]) -> dict[str, Any]:
         "no_progress_rounds": state["no_progress_rounds"],
         "failed_pivots": state["failed_pivots"],
         "last_progress": deepcopy(state["last_progress"]),
+        "last_retrieval_plan": deepcopy(state.get("last_retrieval_plan", {})),
+        "working_notes": deepcopy(state.get("working_notes", {})),
     }
 
 
@@ -204,6 +209,23 @@ def _infer_constraint_type(text: str) -> str:
     return "factual"
 
 
+def _is_literature_discovery_task(state: dict[str, Any]) -> bool:
+    qm = state.get("question_model") or {}
+    text_parts = [
+        str(qm.get("answer_type", "")),
+        str(qm.get("output_fields", "")),
+        str(qm.get("hard_constraints", "")),
+        str(qm.get("soft_clues", "")),
+        str(state.get("active_constraint", "")),
+    ]
+    lowered = " ".join(text_parts).lower()
+    return any(token in lowered for token in (
+        "paper", "publication", "journal", "venue", "published",
+        "author", "doi", "article", "conference", "论文", "期刊", "发表",
+        "multinomial", "logistic regression", "census",
+    ))
+
+
 def _action_card(
     state: dict[str, Any],
     action: str,
@@ -225,16 +247,31 @@ def _action_card(
     if action == "inventory_known_facts":
         required_output = "List known facts and 2-5 possible reasoning paths for the active constraint."
         allowed = ["research_state"]
-        blocked = _external_retrieval_tools()
+        blocked = []
         search_needed = "after_inventory"
-        why = "The active constraint has not been grounded in known facts yet."
+        why = "The active constraint has not been grounded in known facts yet. This is guidance, not a retrieval ban."
+    elif action == "discriminating_search":
+        required_output = (
+            "Retrieval without articulated strategy is keyword soup. "
+            "Before each search batch, call research_state(operation=\"retrieval_plan\") with:\n"
+            "1) reasoning_chain: the step-by-step logic that produced this query (NOT a rephrasing of the question into keywords)\n"
+            "2) query_mode: discovery|expansion|discriminating|answer — which of the 4 modes?\n"
+            "3) domain_lock: site: domain or include_domains list — lock to authoritative source\n"
+            "4) expected_gain: what hard constraint this query should discriminate or verify\n"
+            "You CANNOT jump from discovery directly to answer mode. "
+            "Do not search by splitting the question into disconnected keywords. "
+            "Query must be the CONCLUSION of a reasoning chain."
+        )
+        allowed = ["research_state"]
+        blocked = []
+        search_needed = "yes"
+        why = "Keyword-soup search wastes rounds. Each query should test a specific hypothesis from your reasoning chain."
     elif action == "reason_from_known_facts":
         required_output = "Write 2-5 reasoning chains, mark which support/exclude the candidate, then decide whether search is only needed for verification."
         allowed = ["research_state", "wikipedia_lookup"]
-        # Permit lightweight encyclopedia verification while blocking broader retrieval drift.
-        blocked = _external_retrieval_tools(except_tools={"wikipedia_lookup"})
+        blocked = []
         search_needed = "only_for_verification" if facts or any(state["known_fact_inventory"].values()) else "after_inventory"
-        why = "Known facts or reasoning paths may resolve the active constraint without another broad search."
+        why = "Known facts or reasoning paths may resolve the active constraint, but targeted retrieval is allowed when it discovers or discriminates candidates."
         if ctype == "associative":
             required_output = (
                 "Write 2 competing interpretations, then prefer the one with fewer assumptions / shorter chain "
@@ -277,10 +314,30 @@ def _action_card(
 
 
 def _next_action(state: dict[str, Any]) -> dict[str, Any]:
+    if state.get("after_reset"):
+        return {
+            "next_action": "restart_required",
+            "control": {"restart_required": True, "answer_allowed": False},
+            "state": _public_state(state),
+            "action_card": {
+                "required_output": "State was reset. You must re-enter the state machine via research_state(operation=\"start\", question_model=...) before any retrieval.",
+                "why_this_action": "Reset cleared all research state; retrieval is blocked until you re-enter the state machine.",
+                "allowed_next_tools": ["research_state"],
+                "blocked_next_tools": _external_retrieval_tools(),
+                "search_needed": "no",
+                "search_policy": "blocked",
+                "reasoning_lenses": [],
+                "active_constraint": "",
+                "candidate": "",
+                "constraint_type": "",
+            },
+        }
+
     candidates = state["candidates"]
     has_active_constraint = bool(state["active_constraint"])
     has_known_facts = bool(state["known_fact_inventory"])
     has_reasoning_paths = any(state["reasoning_paths"].values())
+    literature_discovery = _is_literature_discovery_task(state)
     winners = [
         name for name, item in candidates.items()
         if item.get("status") == "winner"
@@ -288,7 +345,7 @@ def _next_action(state: dict[str, Any]) -> dict[str, Any]:
     has_rejected = any(item.get("status") == "rejected" for item in candidates.values())
     active_type = state.get("active_constraint_type") or _infer_constraint_type(state["active_constraint"])
     answer_allowed = bool(winners and (has_rejected or len(candidates) <= 1))
-    must_inventory = has_active_constraint and not has_known_facts
+    must_inventory = has_active_constraint and not has_known_facts and not literature_discovery
     must_pivot = state["failed_pivots"] >= 1 and not answer_allowed
     must_stop = state["failed_pivots"] >= 2 and not answer_allowed
     reasoning_preferred = bool(
@@ -322,6 +379,7 @@ def _next_action(state: dict[str, Any]) -> dict[str, Any]:
             "must_pivot": must_pivot,
             "must_stop_or_answer_uncertain": must_stop,
             "reasoning_preferred": reasoning_preferred,
+            "literature_discovery": literature_discovery,
         },
         "state": _public_state(state),
         "action_card": _action_card(state, action),
@@ -360,6 +418,7 @@ async def handle_research_state(
 
     if op == "reset":
         _states[_sid()] = _empty_state()
+        _states[_sid()]["after_reset"] = True
         _save_state(_states[_sid()])
         return ToolResult.ok(data=_next_action(_states[_sid()]))
 
@@ -371,6 +430,7 @@ async def handle_research_state(
         return ToolResult.ok(data=_next_action(state))
 
     if op == "focus_constraint":
+        state["after_reset"] = False
         state["active_constraint"] = active_constraint.strip()
         state["active_constraint_type"] = _infer_constraint_type(state["active_constraint"])
         state["expected_gain"] = expected_gain.strip()
@@ -436,6 +496,37 @@ async def handle_research_state(
         _save_state(state)
         return ToolResult.ok(data=_next_action(state))
 
+    if op == "retrieval_plan":
+        state["expected_gain"] = kw.get("expected_gain", "").strip()
+        state["last_retrieval_plan"] = {
+            "reasoning_chain": kw.get("reasoning_chain", "").strip(),
+            "query_mode": kw.get("query_mode", "").strip(),
+            "domain_lock": kw.get("domain_lock", "").strip(),
+            "expected_gain": kw.get("expected_gain", "").strip(),
+        }
+        _save_state(state)
+        result = _next_action(state)
+        result["retrieval_plan_recorded"] = True
+        result["next_action"] = result.get("next_action", "discriminating_search")
+        return ToolResult.ok(data=result)
+
+    if op == "working_notes":
+        state["working_notes"] = {
+            "question_type": kw.get("question_type", "").strip(),
+            "active_goal": kw.get("active_goal", "").strip(),
+            "current_action": kw.get("current_action", "").strip(),
+            "known": _as_list(kw.get("known")),
+            "unknown": _as_list(kw.get("unknown")),
+            "failed_paths": _as_list(kw.get("failed_paths")),
+            "evidence_target": kw.get("evidence_target", "").strip(),
+            "exit_condition": kw.get("exit_condition", "").strip(),
+            "next_move": kw.get("next_move", "").strip(),
+        }
+        _save_state(state)
+        result = _next_action(state)
+        result["working_notes_recorded"] = True
+        return ToolResult.ok(data=result)
+
     if op == "analyze_constraint":
         constraint_text = active_constraint.strip() or state["active_constraint"]
         if constraint_text:
@@ -480,6 +571,69 @@ async def handle_research_state(
     return ToolResult.fail(f"unknown operation: {operation}")
 
 
+def enforce_research_state_action_card(
+    work_dir: str | None,
+    tool_names: list[str],
+) -> tuple[bool, str | None]:
+    """Check if any tool in tool_names violates the research state action_card.
+
+    Reads the persisted research state, computes the action_card, and returns
+    (blocked, reminder) if any tool in tool_names is blocked. Returns
+    (False, None) if no research state exists or nothing is blocked.
+    """
+    if not work_dir:
+        return False, None
+
+    path = Path(work_dir) / "research" / "research_state.json"
+    if not path.exists():
+        return False, None
+
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False, None
+
+    if not isinstance(loaded, dict):
+        return False, None
+
+    state = _empty_state()
+    for key in state:
+        if key in loaded:
+            state[key] = loaded[key]
+
+    action = _next_action(state)
+    phase = action.get("next_action", "")
+    # Most action-card tool restrictions are guidance, not runtime locks.
+    # Hard blocking is reserved for reset/terminal phases. Discovery tasks,
+    # especially literature lookup, must be allowed to retrieve candidates.
+    if phase not in {"restart_required", "answer_allowed", "answer_with_uncertainty"}:
+        return False, None
+
+    action_card = action.get("action_card", {})
+    blocked_next_tools = action_card.get("blocked_next_tools", [])
+
+    if not blocked_next_tools:
+        return False, None
+
+    violating_tools = [t for t in tool_names if t in blocked_next_tools]
+    if not violating_tools:
+        return False, None
+
+    reminder = (
+        f"<system-reminder>\n"
+        f"Research phase guardrail: tool(s) {violating_tools} are blocked "
+        f"by current research phase ({action.get('next_action', 'unknown')}).\n"
+        f"Required output: {action_card.get('required_output', 'N/A')}\n"
+        f"Reason: {action_card.get('why_this_action', 'N/A')}\n"
+        f"Allowed tools: {action_card.get('allowed_next_tools', [])}\n"
+        f"Blocked tools: {blocked_next_tools}\n"
+        f"Reasoning lenses: {action_card.get('reasoning_lenses', [])}\n"
+        f"Follow the action card before calling blocked retrieval tools.\n"
+        f"</system-reminder>"
+    )
+    return True, reminder
+
+
 def register_research_tools(r) -> None:
     r.register("research_state", "reasoning", {
         "name": "research_state",
@@ -493,6 +647,7 @@ def register_research_tools(r) -> None:
                         "start", "focus_constraint", "inventory_known_facts",
                         "update_candidate", "add_evidence", "round_update",
                         "pivot", "next_action", "analyze_constraint", "reset",
+                        "retrieval_plan", "working_notes",
                     ],
                     "description": "State operation to perform.",
                 },
@@ -515,6 +670,18 @@ def register_research_tools(r) -> None:
                 "progress_note": {"type": "string", "description": "What changed in the last round."},
                 "pivot_strategy": {"type": "string", "description": "New frame/query family after a failed pivot."},
                 "constraint_type": {"type": "string", "enum": ["factual", "temporal", "geographic", "linguistic", "associative", "relational", "causal", ""], "description": "Optional constraint type for analyze_constraint."},
+                "reasoning_chain": {"type": "string", "description": "Step-by-step reasoning that produced this query (retrieval_plan). NOT keywords from the question."},
+                "query_mode": {"type": "string", "enum": ["discovery", "expansion", "discriminating", "answer", ""], "description": "Query mode (retrieval_plan)."},
+                "domain_lock": {"type": "string", "description": "site: domain or domain list to lock search (retrieval_plan)."},
+                "question_type": {"type": "string", "enum": ["literature_lookup", "factual_lookup", "puzzle", "synthesis", "analysis", ""], "description": "Compact task type for working_notes."},
+                "active_goal": {"type": "string", "description": "Current goal for working_notes: what is being solved now."},
+                "current_action": {"type": "string", "enum": ["reason", "lookup", "match", "search", "verify", "answer", ""], "description": "Current research action for working_notes: reason from known facts, lookup authoritative facts, match similar cases/papers/entities, search to discover candidates, verify a candidate/output field, or answer."},
+                "known": {"type": "array", "items": {"type": "string"}, "description": "2-4 confirmed facts for working_notes."},
+                "unknown": {"type": "array", "items": {"type": "string"}, "description": "Missing facts or unresolved checks for working_notes."},
+                "failed_paths": {"type": "array", "items": {"type": "string"}, "description": "Search frames, reasoning paths, or candidates already tried and found unhelpful."},
+                "evidence_target": {"type": "string", "description": "The claim, candidate, or constraint this action must support or exclude."},
+                "exit_condition": {"type": "string", "description": "What result means this action should stop, pivot, verify, or answer."},
+                "next_move": {"type": "string", "description": "Next move and why: search, reason, verify, pivot, or answer."},
             },
             "required": ["operation"],
         },

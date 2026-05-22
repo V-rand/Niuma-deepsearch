@@ -70,14 +70,18 @@ def _wikipedia_lookup_sync(query: str, lang: str = "") -> dict[str, Any] | None:
                 "pageid": d.get("pageid"),
             }
 
-        # Fallback: search API
+        # Fallback: search API (text search + redirect info)
         api = _wiki_query_api(code)
         sr = _requests.get(api, params={
             "action": "query", "format": "json",
             "list": "search", "srsearch": query, "srlimit": 3,
+            "srwhat": "text",
+            "srprop": "size|wordcount|timestamp|snippet|titlesnippet|redirecttitle|redirectsnippet",
+            "srinfo": "suggestion",
         }, headers={"User-Agent": UA}, timeout=API_TIMEOUT)
         sr.raise_for_status()
-        search_results = sr.json().get("query", {}).get("search", [])
+        sr_data = sr.json()
+        search_results = sr_data.get("query", {}).get("search", [])
         if not search_results:
             return None
 
@@ -88,9 +92,12 @@ def _wikipedia_lookup_sync(query: str, lang: str = "") -> dict[str, Any] | None:
                 best = r
                 break
         if not best:
-            return None
+            best = search_results[0]
 
-        title = best["title"]
+        # Use redirect target if the result is a redirect page
+        title = best.get("redirecttitle") or best["title"]
+        raw_snippet = best.get("snippet") or ""
+        snippet = re.sub(r"<[^>]+>", "", raw_snippet).strip()
         # Fetch via REST API using the search-discovered title
         safe_t = title.replace(" ", "_")
         rest_url2 = f"https://{code}.wikipedia.org/api/rest_v1/page/summary/{safe_t}"
@@ -113,7 +120,7 @@ def _wikipedia_lookup_sync(query: str, lang: str = "") -> dict[str, Any] | None:
             "lang": code,
             "title": title,
             "url": f"https://{code}.wikipedia.org/wiki/{title.replace(' ', '_')}",
-            "summary": (best.get("snippet") or "")[:500],
+            "summary": snippet[:500],
             "description": "",
         }
 
@@ -124,7 +131,11 @@ def _wikipedia_lookup_sync(query: str, lang: str = "") -> dict[str, Any] | None:
             "summary": "Wikipedia request timed out; use another retrieval source.",
         }
     except Exception:
-        return None
+        return {
+            "query": query, "lang": code or "en",
+            "error": "unavailable",
+            "summary": "Wikipedia request failed (network error); use another retrieval source.",
+        }
 
 
 async def handle_wikipedia_lookup(query: str, lang: str = "", **kw) -> ToolResult:

@@ -1,6 +1,7 @@
-Short-answer research control tool. Use this before repeated search when solving puzzle-like or multi-constraint questions.
+Research control and working-notes tool. Required for repeated short-answer retrieval; optional for long-form or complex retrieval when you need to track active goals, evidence targets, failed paths, or next actions.
 
-It externalizes the working state that should not live only in private reasoning and returns action cards for the next move:
+It externalizes working state that should not live only in private reasoning and returns action cards for the next move:
+- compact working notes: question_type, active_goal, current_action, known, unknown, failed_paths, evidence_target, exit_condition, next_move
 - active constraint
 - known facts already available
 - reasoning paths from known facts
@@ -8,15 +9,16 @@ It externalizes the working state that should not live only in private reasoning
 - evidence verdicts
 - no-progress rounds and failed pivots
 
-Typical flow:
+Typical short-answer flow:
 1. start with question_model
 2. focus_constraint before searching
 3. inventory_known_facts before web_search when the constraint may be solved by reasoning
 4. update_candidate / add_evidence after tools or reasoning
 5. round_update after each research round
 6. analyze_constraint when a clue needs reasoning rather than broad search
-7. next_action to get control signals before searching again
+7. working_notes every few retrieval/reasoning steps, when stuck, or before pivot/answer. Use current_action to distinguish reason, lookup, match, search, verify, and answer.
+8. next_action to get control signals before searching again
 
-If next_action returns must_inventory_known_facts, do not search yet. First list what is already known about the active candidate/constraint and possible reasoning paths.
+If next_action returns must_inventory_known_facts, first list what is already known about the active candidate/constraint and possible reasoning paths. For discovery-first paper/document lookup, a targeted high-entropy retrieval plan may be the right next action.
 
 If action_card blocks web_search/web_read, follow the card first. It is designed to turn "think harder" into a concrete reasoning task.

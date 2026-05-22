@@ -275,6 +275,7 @@ def reconstruct_messages_from_db(db_messages: list[dict[str, Any]], *, need_reas
             })
         else:
             item: dict[str, Any] = {"role": role, "content": content}
+            tool_calls = None
             if kind == "chat":
                 tool_calls = meta.get("tool_calls")
                 if tool_calls is not None:
@@ -314,6 +315,7 @@ def reconstruct_messages_from_db(db_messages: list[dict[str, Any]], *, need_reas
                 msg["tool_calls"] = valid
             else:
                 msg.pop("tool_calls", None)
+                msg.pop("reasoning_content", None)
         i += 1
 
     return result
