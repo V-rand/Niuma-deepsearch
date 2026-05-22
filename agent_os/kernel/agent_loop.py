@@ -1156,7 +1156,7 @@ class AgentLoop:
             yield {
                 "type": "activity",
                 "phase": "tool.completed",
-                "detail": f"工具 {tc['name']} 执行完成 | 并发耗时: {latency_ms or 0:.1f}s",
+                "detail": f"工具 {tc['name']} 执行完成 | 并发耗时: {(latency_ms or 0) / 1000:.1f}s",
                 "payload": {"tool": tc["name"], "latency_ms": latency_ms, "success": result.success, "parallel": True},
             }
             result_dict = result.to_dict()
@@ -1734,7 +1734,7 @@ class AgentLoop:
             yield {"type": "activity", "phase": "message.injected", "detail": f"用户注入消息: {msg[:100]}"}
 
         # -- 4. Todo nudge (after 4+ rounds without todowrite) ------------------
-        if consecutive_tool_rounds > 4:
+        if consecutive_tool_rounds > 3:
             refreshed = await self.sessions.get(session_id)
             if refreshed and refreshed.todo_list:
                 active = [t for t in refreshed.todo_list if t.get("status") in ("pending", "in_progress", "blocked")]
@@ -1881,6 +1881,8 @@ class AgentLoop:
                                     "source_paths": [item.get("case_no") or item.get("title") for item in results if item.get("case_no") or item.get("title")]}}
         elif self._is_external_retrieval_tool(tool_name):
             label = self._retrieval_archive_label(arguments, data, tool_name)
+            if not self._has_archivable_retrieval_data(data):
+                return None
             content = self._render_generic_retrieval_archive(tool_name, arguments, data)
             path = f"raw_search/{tool_name}/{now}_{slug(label)}.md"
             results = data.get("results", []) if isinstance(data.get("results"), list) else []
@@ -2048,6 +2050,15 @@ class AgentLoop:
             if value:
                 return value
         return tool_name
+
+    @staticmethod
+    def _has_archivable_retrieval_data(data: dict[str, Any]) -> bool:
+        results = data.get("results")
+        if isinstance(results, list):
+            return bool(results)
+        if data.get("url") or data.get("content") or data.get("infobox"):
+            return True
+        return not data.get("error")
 
     @staticmethod
     def _render_generic_retrieval_archive(tool_name: str, arguments: dict[str, Any], data: dict[str, Any]) -> str:

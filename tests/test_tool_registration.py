@@ -76,3 +76,21 @@ def test_array_parameters_declare_items(tmp_path, monkeypatch):
         import asyncio
 
         asyncio.run(osys.stop())
+
+
+def test_web_search_is_not_parallel_safe(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("EMBEDDING_API_KEY", "")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "")
+
+    from agent_os import AgentOS
+
+    osys = AgentOS(data_dir=str(tmp_path))
+    try:
+        entry = osys.tool_registry.get_entry("web_search")
+        assert entry is not None
+        assert entry.concurrency_safe is False
+    finally:
+        import asyncio
+
+        asyncio.run(osys.stop())

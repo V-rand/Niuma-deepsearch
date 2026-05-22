@@ -453,6 +453,35 @@ async def test_structured_retrieval_tool_results_are_archived(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_error_only_retrieval_results_are_not_archived(tmp_path):
+    from agent_os.kernel.agent_loop import AgentLoop
+    from agent_os.tools.registry import ToolResult
+
+    class Tools:
+        def get_entry(self, name):
+            if name == "wikipedia_lookup":
+                return type("Entry", (), {"toolset": "retrieval"})()
+            return None
+
+    class WorkspaceMemory:
+        async def upsert_artifact(self, *args, **kwargs):
+            raise AssertionError("error-only retrieval result should not be archived")
+
+    loop = AgentLoop.__new__(AgentLoop)
+    loop.tools = Tools()
+    loop.workspace_memory = WorkspaceMemory()
+
+    archived_path = await loop._archive_external_tool_result(
+        "s1",
+        "wikipedia_lookup",
+        {"query": "garfield"},
+        ToolResult.ok(data={"query": "garfield", "error": "not_found", "summary": "not found"}),
+    )
+
+    assert archived_path is None
+
+
+@pytest.mark.asyncio
 async def test_plugin_retrieval_tool_results_are_archived_by_toolset(tmp_path):
     from agent_os.kernel.agent_loop import AgentLoop
     from agent_os.tools.registry import ToolResult

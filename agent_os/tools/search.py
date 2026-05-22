@@ -180,4 +180,4 @@ def register_search_tools(r) -> None:
         "source": {"type": "string", "description": "搜索源：web（默认）, news, scholar（Google Scholar 学术论文）"},
         "exact_match": {"type": "boolean", "description": "true 则要求精确匹配查询短语。适合搜特定人名、实体名，不会拆词。可能返回空。"},
     }, "required": ["query"]},
-    }, handle_web_search, concurrency_safe=True, read_only=True)
+    }, handle_web_search, concurrency_safe=False, read_only=True)

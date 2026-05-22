@@ -394,6 +394,8 @@ class SubAgent:
             metadata = {"query": query, "results": results, "generated_by": self.sub_agent_id}
         elif self._is_external_retrieval_tool(tool_name):
             label = self._retrieval_archive_label(arguments, data, tool_name)
+            if not self._has_archivable_retrieval_data(data):
+                return None
             content = self._render_generic_retrieval_archive(tool_name, arguments, data)
             path = f"{sub_prefix}/{tool_name}/{now}_{slug(label)}.md"
             results = data.get("results", []) if isinstance(data.get("results"), list) else []
@@ -480,6 +482,15 @@ class SubAgent:
             if value:
                 return value
         return tool_name
+
+    @staticmethod
+    def _has_archivable_retrieval_data(data: dict[str, Any]) -> bool:
+        results = data.get("results")
+        if isinstance(results, list):
+            return bool(results)
+        if data.get("url") or data.get("content") or data.get("infobox"):
+            return True
+        return not data.get("error")
 
     @staticmethod
     def _render_generic_retrieval_archive(tool_name: str, arguments: dict[str, Any], data: dict[str, Any]) -> str:

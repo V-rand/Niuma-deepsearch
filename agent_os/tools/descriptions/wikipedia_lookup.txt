@@ -1,16 +1,18 @@
-查询 Wikipedia 获取人物、剧集、影视作品的结构化信息。使用英文 Wikipedia，支持中文查询词（如 "武林外传" → "My Own Swordsman"）。
-
-返回 page title、summary（首段摘要）、categories（分类标签页）、和解析后的 infobox（信息框结构化数据——年份、主演、类型、评分、出生地等）。
-
-比 web_search + web_read 逐页翻找更精准高效。适合查询演员出生地、剧集首播年份、类型等确切事实。
+查询 Wikipedia 获取人物、事件、作品等结构化信息。使用 Wikipedia REST API（单次请求），速度快。
 
 参数：
-- query: 搜索关键词（精确页面标题返回最准确）
-- lang: 语言代码（目前仅 en，保留参数为兼容）
+- query: 页面标题或搜索关键词（精确标题返回最准确）
+- lang: 语言代码 "zh" 或 "en"（默认 en）
 
 返回：
 - title: Wikipedia 页面标题
 - url: 页面链接
-- summary: 首段摘要（~200-500 字）
-- categories: 页面分类标签列表
-- infobox: 解析后的结构化信息（键值对，如 {"首播时间": "2006-01-02", "主演": "闫妮,姚晨...", "类型": "古装喜剧"})
+- summary: 首段摘要（约 200-2000 字）
+- description: 页面简短描述（如 "1880–1881 war in South Africa"）
+- pageid: Wikipedia 页面 ID
+- error: 不可用时为 "unavailable" 或 "not_found"
+
+适用于：演员出生地、剧集首播年份、人物生平、事件日期等确切事实查询。
+不适用于：需要最新资讯、深度分析的场景。
+
+注意：中国大陆访问 Wikipedia 可能较慢，查询超时时请改用 web_search。
