@@ -15,31 +15,21 @@ def test_agent_system_includes_core_research_infrastructure():
     assert "long_form_report" in prompt
     assert "skill_use" in prompt
 
-    # Unified research loop (replaces separate short/long sections)
-    assert "<research_loop>" in prompt
+    # Universal research loop; mode-specific discipline lives in skills
+    assert "<universal_research_loop>" in prompt
     assert "PARSE" in prompt
     assert "VERIFY_PREMISES" in prompt
     assert "REASON" in prompt
 
-    # Mode-specific discipline sections
-    assert "<short_answer_discipline>" in prompt
-    assert "Candidate Ledger" in prompt
-    assert "Evidence Ledger" in prompt
-    assert "discriminating query" in prompt
-    assert "Final Review Gate" in prompt
-    assert "<long_form_discipline>" in prompt
-    assert "Coverage Map" in prompt
-    assert "Source Strategy" in prompt
-
-    # Report writing protocol
-    assert "<report_writing_protocol>" in prompt
-    assert "Citation Rules" in prompt
-    assert "Anti-AI-Tone Editing" in prompt
-    assert "Formula and Number Rules" in prompt
+    # System prompt should not duplicate the full skills
+    assert "<short_answer_discipline>" not in prompt
+    assert "<long_form_discipline>" not in prompt
+    assert "<report_writing_protocol>" not in prompt
+    assert "<reasoning_strategy>" in prompt
+    assert "Research requires explicit thinking strategy" in prompt
 
     # Tool references
     assert "research_state" in prompt
-    assert "analyze_constraint" in prompt
     assert "action_card" in prompt
 
 
@@ -75,13 +65,10 @@ def test_persistent_prompts_absorb_research_discipline():
     memory = Path("agent_os/prompts/memory_guidance.txt").read_text(encoding="utf-8")
 
     assert "short_answer" in agent
-    assert "long_form" in agent
-    assert "Quick Start" in agent
-    assert "PARSE" in agent
-    assert "VERIFY_PREMISES" in agent
-    assert "Coverage Map" in agent
+    assert "long_form_report" in agent
     assert "skill_use" in agent
     assert "research_state" in agent
+    assert "Research Habits" in agent
     # The full discipline (Convergence Rules, Report Review Gate, etc.) lives in skills now
     # AGENT.md is the quick-reference companion, not the complete protocol
 

@@ -30,7 +30,7 @@ When using `web_search`, NEVER search the entire web for academic content. Lock 
 
 ```
 # Instead of: "conference-2022 paper countryX countryY"
-# Use: site:proceedings-site "countryX" "universityY"
+# Use: site:authoritative-proceedings-domain "countryX" "universityY"
 
 # Instead of: "what is the capital of France"
 # Use: site:en.wikipedia.org "capital" "France"
@@ -56,7 +56,7 @@ Do not stop at the first search. Use results to inform the next step:
 4. **Verify with structured tools**: Take those entities to arxiv_search or openalex_works for precise verification.
 5. **Cross-verify**: Confirm with a second authoritative source.
 
-Example chain for finding a specific conference paper:
+Generic chain for finding a specific conference paper:
 ```
 Step 1: arxiv_search(author="known_author", venue="venue_name", year="2022") → returns candidates
 Step 2: web_read most promising result → extract full author list, reference info
@@ -69,8 +69,8 @@ Step 4: openalex_works(doi="extracted DOI") → final confirmation
 A paper's reference list is its DNA. If you know specific references:
 ```
 openalex_works(
-    references="Language Models are Few-Shot Learners, A Simple Framework for Contrastive Learning of Visual Representations",
-    year="2022"
+    references="known reference title 1, known reference title 2",
+    year="target year"
 )
 ```
 This finds ALL papers that cite BOTH papers — usually a handful. Combined with author/venue/year filters, this uniquely identifies the target paper without needing the title.

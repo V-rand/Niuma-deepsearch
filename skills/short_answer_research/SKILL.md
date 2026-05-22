@@ -30,7 +30,7 @@ Use a state machine, not a free-form search loop. Each gate determines the next 
 - Examples of premises to check: "华东五校 includes which schools?", "Is USTC in 华东五校?", "What is the capital of X?", "Is this person's birthplace X or Y?"
 - When positional clues exist (author 3, author 6, reference 4), do positional reasoning: author-1 is usually the lead contributor (often PhD student), author-last is usually the senior PI. Reference positions form a field fingerprint — the first few references define the subfield the paper builds on.
 
-**1. PARSE** — extract answer_type, hard_constraints, soft_clues, ambiguous_terms, output_fields, and premises. Treat wording differences as potential traps: approved vs launched, birthplace vs registered residence, adjacent to vs located in, belongs to vs located in. Output the Question Model (at minimum: answer_type and hard_constraints) as your first visible action. Do not proceed to search without this.
+**1. PARSE** — extract answer_type, hard_constraints, soft_clues, ambiguous_terms, output_fields, and premises. Treat wording differences as potential traps: approved vs launched, birthplace vs registered residence, adjacent to vs located in, belongs to vs located in. Output the Question Model (at minimum: answer_type and hard_constraints) as your first visible process action when useful, and externalize it through `research_state`. This process view does not change the final-answer rule: final output stays concise and does not expose the full ledger unless asked. Do not proceed to search without this.
 
 **2. CANDIDATE** — build 2-5 candidates before answer verification. If fewer than 2 candidates exist, the next action is candidate discovery. If the question names a relation such as "female lead", enumerate ALL role members instead of choosing the most famous one. When clues involve "substance/drug", treat each implied substance as an independent candidate.
 
@@ -67,15 +67,15 @@ Externalize and maintain these fields in `research_state` (not in hidden reasoni
 When searching for candidates, use staged, domain-locked queries — not broad keyword soup across the entire web.
 
 **Stage 1 — Candidate Discovery:**
-Lock the search to the authoritative domain for your problem. For conference papers: PMLR proceedings, OpenReview, arXiv. For entity facts: Wikipedia. Use `site:` to restrict scope.
-Example: `site:proceedings.mlr.press/v162 "Singapore" "University of Science and Technology of China"` — instantly filters from 1200+ papers to a handful matching the constraint combination.
+Lock the search to the authoritative domain for your problem. For conference papers: official proceedings, OpenReview, arXiv, publisher pages, or the venue's official site. For entity facts: Wikipedia or the relevant official/source database. Use `site:` or `include_domains` to restrict scope.
+Example: `site:authoritative-proceedings-domain "known country" "known institution"` — filters a large corpus to a handful matching the constraint combination.
 
 **Stage 2 — Fingerprint Verification:**
 Once you have candidates, use the most specific known facts (reference titles, DOI, exact author names) as verification queries within the same locked domain.
-Example: `site:proceedings.mlr.press/v162 "Language Models are Few-Shot Learners" "A Simple Framework for Contrastive Learning"` — uses reference fingerprints to uniquely identify the paper.
+Example: `site:authoritative-proceedings-domain "known reference title 1" "known reference title 2"` — uses reference fingerprints to identify the candidate.
 
 **Stage 3 — Confirmation:**
-Cross-verify the candidate with another authoritative source: `"candidate title" PMLR` or `arxiv_search(title="candidate title")`.
+Cross-verify the candidate with another authoritative source: `"candidate title" authoritative source` or `arxiv_search(title="candidate title")`.
 
 **Google operators (supported by both Tavily and Serper):**
 - `site:domain/path` — domain lock
@@ -86,7 +86,7 @@ Cross-verify the candidate with another authoritative source: `"candidate title"
 **Site lock targets for common tasks:**
 | Task | Lock to |
 |---|---|
-| Conference papers (ICML/NeurIPS/ICLR etc.) | `site:proceedings.mlr.press/v{NUM}` or `site:openreview.net` or the conference's official proceedings site |
+| Conference papers | official proceedings site, OpenReview, arXiv, publisher pages |
 | Wikipedia facts | `site:en.wikipedia.org` |
 | Government/official data | `site:gov.cn` or domain of the relevant agency |
 | Company/product info | `site:company.com` |
