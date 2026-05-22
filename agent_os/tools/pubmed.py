@@ -25,6 +25,7 @@ NCBI_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 NCBI_KEY = os.getenv("NCBI_API_KEY", "")
 _DESC_DIR = Path(__file__).resolve().parent / "descriptions"
 _last_pubmed_call: float = 0  # NCBI asks 3 req/sec without key
+_pubmed_lock = asyncio.Lock()
 
 
 def _load_desc(name: str) -> str:
@@ -85,11 +86,12 @@ async def handle_pubmed_search(
     }
 
     try:
-        elapsed = time.time() - _last_pubmed_call
-        rate = 0.34 if NCBI_KEY else 0.35  # ~3 req/sec
-        if elapsed < rate:
-            await asyncio.sleep(rate - elapsed)
-        _last_pubmed_call = time.time()
+        async with _pubmed_lock:
+            elapsed = time.time() - _last_pubmed_call
+            rate = 0.34 if NCBI_KEY else 0.35  # ~3 req/sec
+            if elapsed < rate:
+                await asyncio.sleep(rate - elapsed)
+            _last_pubmed_call = time.time()
 
         loop = asyncio.get_running_loop()
         r = await loop.run_in_executor(None, _pubmed_api, f"{NCBI_BASE}/esearch.fcgi", search_params)

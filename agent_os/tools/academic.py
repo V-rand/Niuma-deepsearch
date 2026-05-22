@@ -21,6 +21,7 @@ _DESC_DIR = Path(__file__).resolve().parent / "descriptions"
 _arxiv_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 _ARXIV_CACHE_TTL = 86400  # 24h — results don't change until midnight
 _last_arxiv_call: float = 0  # rate limiter: 3s between requests per API docs
+_arxiv_lock = asyncio.Lock()
 
 
 def _load_desc(name: str) -> str:
@@ -147,10 +148,11 @@ async def handle_arxiv_search(
     }
     for attempt in range(3):
         try:
-            elapsed = time.time() - _last_arxiv_call
-            if elapsed < 3:
-                await asyncio.sleep(3 - elapsed)
-            _last_arxiv_call = time.time()
+            async with _arxiv_lock:
+                elapsed = time.time() - _last_arxiv_call
+                if elapsed < 3:
+                    await asyncio.sleep(3 - elapsed)
+                _last_arxiv_call = time.time()
             loop = asyncio.get_running_loop()
             text = await loop.run_in_executor(None, _arxiv_request, params)
             parsed = _parse_arxiv_response(text, max_results)
