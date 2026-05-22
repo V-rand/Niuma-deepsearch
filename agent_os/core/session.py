@@ -217,14 +217,30 @@ class SessionManager:
 
     async def list(self) -> list[dict[str, str]]:
         rows = self.store.list_sessions()
-        return [{
-            "id": (data := self.store.row_to_json(row) or {})["id"],
-            "name": data.get("name", ""), "status": data.get("status", ""),
-            "stage": data.get("stage", ""), "created_at": data.get("created_at", ""),
-            "created_at_display": format_local_timestamp(data.get("created_at")),
-            "updated_at": data.get("updated_at", ""),
-            "updated_at_display": format_local_timestamp(data.get("updated_at")),
-        } for row in rows if "__subagent_" not in (self.store.row_to_json(row) or {}).get("name", "")]
+        sessions: list[dict[str, str]] = []
+        for row in rows:
+            data = self.store.row_to_json(row) or {}
+            if self._is_subagent_session(data):
+                continue
+            sessions.append({
+                "id": data["id"],
+                "name": data.get("name", ""),
+                "status": data.get("status", ""),
+                "stage": data.get("stage", ""),
+                "created_at": data.get("created_at", ""),
+                "created_at_display": format_local_timestamp(data.get("created_at")),
+                "updated_at": data.get("updated_at", ""),
+                "updated_at_display": format_local_timestamp(data.get("updated_at")),
+            })
+        return sessions
+
+    @staticmethod
+    def _is_subagent_session(data: dict[str, Any]) -> bool:
+        metadata = data.get("metadata", {}) or {}
+        if bool(metadata.get("is_subagent")):
+            return True
+        # Backward-compatibility for old sub-agent sessions before metadata flag.
+        return "__subagent_" in str(data.get("name", ""))
 
     async def list_active_sessions(self) -> list[Session]:
         rows = self.store.list_sessions_by_status("active")

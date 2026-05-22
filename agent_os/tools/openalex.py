@@ -23,7 +23,7 @@ import requests as _requests
 from .registry import ToolResult
 
 OPENALEX_BASE = "https://api.openalex.org"
-OPENALEX_KEY = os.getenv("OPENALEX_API_KEY", "inFu3PmFF42OqazuvJBi6Q")
+OPENALEX_KEY = os.getenv("OPENALEX_API_KEY")
 OPENALEX_REQUEST_TIMEOUT = 20.0
 _DESC_DIR = Path(__file__).resolve().parent / "descriptions"
 
@@ -131,11 +131,8 @@ async def _resolve_work_id(identifier: str, timeout: float = 10.0) -> str | None
     if OPENALEX_KEY:
         params["api_key"] = OPENALEX_KEY
     try:
-        loop = asyncio.get_running_loop() if asyncio.get_event_loop().is_running() else None
-        if loop:
-            r = await loop.run_in_executor(None, _openalex_get, f"{OPENALEX_BASE}/works", params)
-        else:
-            r = _openalex_get(f"{OPENALEX_BASE}/works", params)
+        loop = asyncio.get_running_loop()
+        r = await loop.run_in_executor(None, _openalex_get, f"{OPENALEX_BASE}/works", params)
         results = r.json().get("results", [])
         if results:
             return _short_id(results[0].get("id", ""))
@@ -276,6 +273,7 @@ async def handle_openalex_works(
 
     filters: list[str] = []
     resolution_notes: list[str] = []
+    venue_expanded = False
 
     venue_fallbacks = {
         "icml": "International Conference on Machine Learning",
@@ -291,6 +289,7 @@ async def handle_openalex_works(
     }
 
     async def _add_filter(etype: str, name: str, filter_template: str):
+        nonlocal venue_expanded
         if not name:
             return
         eid, display = await _resolve_and_get_id(etype, name)
@@ -298,10 +297,11 @@ async def handle_openalex_works(
             full_name = venue_fallbacks[name.lower().strip()]
             eid, display = await _resolve_and_get_id(etype, full_name)
             if eid:
+                venue_expanded = True
                 resolution_notes.append(f"venue '{name}' → auto-expanded to '{full_name}' → {display} ({eid})")
         if eid:
             filters.append(filter_template.format(eid))
-            if f"venue '{name}' → auto-expanded" not in str(resolution_notes):
+            if not (etype == "venue" and venue_expanded):
                 resolution_notes.append(f"{etype} '{name}' → {display} ({eid})")
         else:
             resolution_notes.append(f"{etype} '{name}' → NOT FOUND")
@@ -314,7 +314,20 @@ async def handle_openalex_works(
     )
 
     if year:
-        filters.append(f"publication_year:{year}")
+        y = str(year).strip()
+        if "-" in y:
+            try:
+                start_s, end_s = [p.strip() for p in y.split("-", 1)]
+                start_i = int(start_s)
+                end_i = int(end_s)
+                if start_i > end_i:
+                    return ToolResult.fail("Invalid year range: start year is greater than end year.")
+                filters.append(f"from_publication_date:{start_i}-01-01")
+                filters.append(f"to_publication_date:{end_i}-12-31")
+            except ValueError:
+                return ToolResult.fail("Invalid year range. Use YYYY or YYYY-YYYY.")
+        else:
+            filters.append(f"publication_year:{y}")
     if type:
         filters.append(f"type:{type}")
     if source_type:
@@ -387,11 +400,12 @@ async def handle_openalex_entity(
     results = await _resolve_entity(entity_type.rstrip("s"), search, timeout=30.0)
     if not results:
         return ToolResult.ok(data={"query": search, "results": [], "count": 0, "note": "No matches found"})
+    page_size = min(max(int(per_page or 10), 1), 100)
     return ToolResult.ok(data={
         "entity_type": entity_type,
         "query": search,
-        "results": results[:per_page],
-        "count": min(len(results), per_page),
+        "results": results[:page_size],
+        "count": min(len(results), page_size),
         "total_found": len(results),
     })
 

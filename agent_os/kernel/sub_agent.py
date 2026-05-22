@@ -129,6 +129,7 @@ class SubAgent:
             name=f"{parent_name}__subagent_{self.sub_agent_id}",
             parent_session_id=self.parent_session_id,
             stage=session.stage,
+            metadata={"is_subagent": True, "subagent_id": self.sub_agent_id},
         )
         # Clean up the auto-created dir — sub-agent shares parent's work_dir
         created_dir = Path(child.work_dir)

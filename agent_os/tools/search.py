@@ -37,6 +37,12 @@ async def handle_web_search(
     """Web search with Tavily/Serper dual backends."""
     timeout = 20.0
     errors: list[str] = []
+    source = str(source or "web").strip().lower()
+    time_range = str(time_range or "").strip().lower() or None
+    if source not in {"web", "news", "scholar"}:
+        return ToolResult.fail("Invalid source. Use one of: web, news, scholar.")
+    if time_range and time_range not in {"day", "week", "month", "year"}:
+        return ToolResult.fail("Invalid time_range. Use one of: day, week, month, year.")
 
     def _parse_domains(val):
         if not val:
@@ -69,7 +75,7 @@ async def handle_web_search(
         serper_extra["type"] = "news"
     if time_range:
         tbs_map = {"day": "qdr:d", "week": "qdr:w", "month": "qdr:m", "year": "qdr:y"}
-        serper_extra["tbs"] = tbs_map.get(time_range, "")
+        serper_extra["tbs"] = tbs_map[time_range]
 
     result = await _try_tavily(query=query, max_results=max_results, timeout=timeout, extra=tavily_extra)
     if result["status"] == "success":
@@ -99,10 +105,14 @@ async def _try_tavily(*, query: str, max_results: int, timeout: float, extra: di
         }
         if extra.get("include_domains"):
             payload["include_domains"] = extra["include_domains"]
+        if extra.get("exclude_domains"):
+            payload["exclude_domains"] = extra["exclude_domains"]
         if extra.get("time_range"):
             payload["time_range"] = extra["time_range"]
         if extra.get("topic"):
             payload["topic"] = extra["topic"]
+        if extra.get("exact_match"):
+            payload["exact_match"] = True
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout), trust_env=True) as s:
             async with s.post("https://api.tavily.com/search", json=payload) as r:
                 p = await r.json()
@@ -134,8 +144,20 @@ async def _try_serper(*, query: str, max_results: int, timeout: float, extra: di
                 p = await r.json()
                 if r.status >= 400:
                     return {"status": "error", "detail": f"HTTP {r.status}: {p}", "results": []}
-                items = p.get("organic", [])
-                return {"status": "success", "detail": "ok", "results": [{"title": i.get("title"), "url": i.get("link"), "content": i.get("snippet")} for i in items]}
+                if extra.get("type") == "news":
+                    items = p.get("news", [])
+                elif extra.get("type") == "scholar":
+                    items = p.get("organic", []) or p.get("scholar", [])
+                else:
+                    items = p.get("organic", [])
+                return {
+                    "status": "success",
+                    "detail": "ok",
+                    "results": [
+                        {"title": i.get("title"), "url": i.get("link"), "content": i.get("snippet")}
+                        for i in items
+                    ],
+                }
     except asyncio.TimeoutError:
         return {"status": "error", "detail": f"Timed out after {timeout}s", "results": []}
     except Exception as e:
