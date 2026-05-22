@@ -53,6 +53,23 @@ _PATH_BEARING_TOOLS = frozenset({
     "file_grep", "file_list", "file_tree",
 })
 
+# Fallback for tests/legacy construction without a ToolRegistry. Runtime uses
+# the active registry's ``toolset == "retrieval"`` so config.yaml enable/disable
+# and plugin tools are honored.
+_DEFAULT_EXTERNAL_RETRIEVAL_TOOLS = frozenset({
+    "web_search",
+    "web_read",
+    "arxiv_search",
+    "crossref_search",
+    "openalex_works",
+    "openalex_entity",
+    "wikipedia_lookup",
+    "pubmed_search",
+    "opencitations_search",
+    "law_retrieve",
+    "case_retrieve",
+})
+
 from dataclasses import dataclass, field
 
 
@@ -634,21 +651,20 @@ class AgentLoop:
                 raise
         return None, events
 
-    @staticmethod
     def _research_search_guardrail(
+        self,
         tool_calls: list[dict[str, Any]],
         *,
         consecutive_blind_search_rounds: int,
         messages: list[dict[str, Any]],
     ) -> tuple[bool, str, int, str]:
         names = {str(tc.get("name", "")) for tc in tool_calls}
-        search_names = {"web_search", "web_read"}
-        has_search = bool(names & search_names)
-        if "research_state" in names and has_search:
+        has_retrieval = any(self._is_external_retrieval_tool(name) for name in names)
+        if "research_state" in names and has_retrieval:
             reminder = (
                 "<system-reminder>\n"
                 "Runtime research guardrail: Call research_state separately before retrieval. "
-                "Do not batch research_state with web_search/web_read; first get the action_card, "
+                "Do not batch research_state with retrieval tools; first get the action_card, "
                 "then decide whether retrieval is still needed.\n"
                 "</system-reminder>"
             )
@@ -656,7 +672,7 @@ class AgentLoop:
             return True, reminder, 0, ""
         if "research_state" in names:
             return False, "", 0, ""
-        if not has_search:
+        if not has_retrieval:
             return False, "", consecutive_blind_search_rounds, ""
         next_count = consecutive_blind_search_rounds + 1
         if next_count == 2:
@@ -669,7 +685,7 @@ class AgentLoop:
         if consecutive_blind_search_rounds >= 3:
             reminder = (
                 "<system-reminder>\n"
-                "Runtime research guardrail: you are about to run another web_search/web_read round "
+                "Runtime research guardrail: you are about to run another retrieval round "
                 "without updating research_state. Stop blind searching. First call research_state with "
                 "operation=\"next_action\", operation=\"analyze_constraint\", or operation=\"inventory_known_facts\" for the active constraint. "
                 "State the expected gain before searching again.\n"
@@ -678,6 +694,15 @@ class AgentLoop:
             messages.append({"role": "user", "content": reminder})
             return True, reminder, consecutive_blind_search_rounds, ""
         return False, "", next_count, ""
+
+    def _is_external_retrieval_tool(self, tool_name: str) -> bool:
+        if tool_name == "workspace_search":
+            return False
+        tools = getattr(self, "tools", None)
+        if tools is not None:
+            entry = tools.get_entry(tool_name)
+            return bool(entry and entry.toolset == "retrieval")
+        return tool_name in _DEFAULT_EXTERNAL_RETRIEVAL_TOOLS
 
     @staticmethod
     def _content_filter_retry_kwargs(request_kwargs: dict[str, Any]) -> tuple[dict[str, Any], int]:
@@ -1854,6 +1879,21 @@ class AgentLoop:
             metadata = {"query": query, "results": results, "generated_by": "tool_archive",
                         "lineage": {"generated_by": "tool_archive",
                                     "source_paths": [item.get("case_no") or item.get("title") for item in results if item.get("case_no") or item.get("title")]}}
+        elif self._is_external_retrieval_tool(tool_name):
+            label = self._retrieval_archive_label(arguments, data, tool_name)
+            content = self._render_generic_retrieval_archive(tool_name, arguments, data)
+            path = f"raw_search/{tool_name}/{now}_{slug(label)}.md"
+            results = data.get("results", []) if isinstance(data.get("results"), list) else []
+            metadata = {
+                "query": label,
+                "tool": tool_name,
+                "arguments": arguments,
+                "generated_by": "tool_archive",
+                "lineage": {
+                    "generated_by": "tool_archive",
+                    "source_urls": [item.get("url") for item in results if isinstance(item, dict) and item.get("url")],
+                },
+            }
         else:
             return None
 
@@ -1999,6 +2039,56 @@ class AgentLoop:
         lines = [f"# Case Retrieval Archive", "", f"- Query: {query}", ""]
         for index, item in enumerate(results, start=1):
             lines.extend([f"## Result {index}", f"- Title: {item.get('title', '')}", f"- Case No: {item.get('case_no', '')}", f"- Court: {item.get('court', '')}", f"- Source: {item.get('source', '')}", "", str(item.get("content", "")).strip(), ""])
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _retrieval_archive_label(arguments: dict[str, Any], data: dict[str, Any], tool_name: str) -> str:
+        for key in ("query", "title", "doi", "openalex_id", "pmid", "identifier", "author", "venue", "topic"):
+            value = str(arguments.get(key) or data.get(key) or "").strip()
+            if value:
+                return value
+        return tool_name
+
+    @staticmethod
+    def _render_generic_retrieval_archive(tool_name: str, arguments: dict[str, Any], data: dict[str, Any]) -> str:
+        lines = [
+            f"# {tool_name} Archive",
+            "",
+            "## Arguments",
+            "",
+            "```json",
+            json.dumps(arguments, ensure_ascii=False, indent=2, default=str),
+            "```",
+            "",
+        ]
+        results = data.get("results")
+        if isinstance(results, list):
+            lines.extend(["## Results", ""])
+            for index, item in enumerate(results, start=1):
+                if isinstance(item, dict):
+                    title = item.get("title") or item.get("display_name") or item.get("pmid") or item.get("doi") or f"Result {index}"
+                    lines.extend([f"### {index}. {title}"])
+                    url = item.get("url") or item.get("landing_page_url")
+                    if url:
+                        lines.append(f"- URL: {url}")
+                    for key, value in item.items():
+                        if key in {"title", "display_name", "url", "landing_page_url", "content"}:
+                            continue
+                        if value in ("", None, [], {}):
+                            continue
+                        lines.append(f"- {key}: {json.dumps(value, ensure_ascii=False, default=str) if isinstance(value, (list, dict)) else value}")
+                    content = str(item.get("content") or item.get("abstract") or "").strip()
+                    if content:
+                        lines.extend(["", content])
+                    lines.append("")
+                else:
+                    lines.extend([f"### {index}. Result", "", str(item), ""])
+            extra = {k: v for k, v in data.items() if k != "results"}
+            if extra:
+                lines.extend(["## Metadata", "", "```json", json.dumps(extra, ensure_ascii=False, indent=2, default=str), "```"])
+            return "\n".join(lines).strip()
+
+        lines.extend(["## Data", "", "```json", json.dumps(data, ensure_ascii=False, indent=2, default=str), "```"])
         return "\n".join(lines).strip()
 
     @staticmethod

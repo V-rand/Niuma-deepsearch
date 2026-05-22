@@ -159,6 +159,114 @@ def test_research_guardrail_blocks_after_four_blind_retrieval_rounds():
     assert hint == ""
 
 
+def test_research_guardrail_counts_structured_retrieval_tools():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    messages = []
+    calls = [
+        [{"name": "arxiv_search", "arguments": {"query": "first"}}],
+        [{"name": "openalex_works", "arguments": {"title": "first"}}],
+        [{"name": "pubmed_search", "arguments": {"query": "first"}}],
+        [{"name": "opencitations_search", "arguments": {"doi": "10.123/test"}}],
+    ]
+
+    blind_rounds = 0
+    for index, call in enumerate(calls, start=1):
+        blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+            call,
+            consecutive_blind_search_rounds=blind_rounds,
+            messages=messages,
+        )
+        assert blind_rounds == min(index, 3)
+        if index == 2:
+            assert blocked is False
+            assert "research_state" in hint
+        elif index == 4:
+            assert blocked is True
+            assert "another retrieval round" in reminder
+        else:
+            assert blocked is False
+
+
+def test_research_guardrail_uses_registry_toolset_for_plugin_retrieval_tools():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    class Tools:
+        def get_entry(self, name):
+            if name == "custom_literature_search":
+                return type("Entry", (), {"toolset": "retrieval"})()
+            if name == "disabled_search":
+                return None
+            return None
+
+    loop = AgentLoop.__new__(AgentLoop)
+    loop.tools = Tools()
+    messages = []
+
+    blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+        [{"name": "custom_literature_search", "arguments": {"query": "first"}}],
+        consecutive_blind_search_rounds=0,
+        messages=messages,
+    )
+    assert blocked is False
+    assert reminder == ""
+    assert hint == ""
+    assert blind_rounds == 1
+
+    blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+        [{"name": "disabled_search", "arguments": {"query": "first"}}],
+        consecutive_blind_search_rounds=blind_rounds,
+        messages=messages,
+    )
+    assert blocked is False
+    assert reminder == ""
+    assert hint == ""
+    assert blind_rounds == 1
+
+
+def test_research_guardrail_parallel_retrieval_batch_counts_as_one_round():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    messages = []
+    batch = [
+        {"name": "arxiv_search", "arguments": {"query": "first"}},
+        {"name": "openalex_works", "arguments": {"title": "first"}},
+        {"name": "crossref_search", "arguments": {"query": "first"}},
+    ]
+
+    blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+        batch,
+        consecutive_blind_search_rounds=0,
+        messages=messages,
+    )
+
+    assert blocked is False
+    assert reminder == ""
+    assert hint == ""
+    assert blind_rounds == 1
+
+
+def test_research_guardrail_does_not_count_workspace_search_as_blind_external_retrieval():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    messages = []
+    call = [{"name": "workspace_search", "arguments": {"query": "first"}}]
+
+    blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+        call,
+        consecutive_blind_search_rounds=3,
+        messages=messages,
+    )
+
+    assert blocked is False
+    assert reminder == ""
+    assert hint == ""
+    assert blind_rounds == 3
+
+
 @pytest.mark.asyncio
 async def test_research_state_analyzes_associative_constraint_with_action_card():
     from agent_os.tools.registry import set_session_context
@@ -269,6 +377,114 @@ def test_research_guardrail_blocks_mixed_state_and_retrieval_batch():
     assert "Call research_state separately" in reminder
     assert blind_rounds == 0
     assert hint == ""
+
+
+def test_research_guardrail_blocks_mixed_state_and_structured_retrieval_batch():
+    from agent_os.kernel.agent_loop import AgentLoop
+
+    loop = AgentLoop.__new__(AgentLoop)
+    messages = []
+    mixed = [
+        {"name": "openalex_works", "arguments": {"title": "first"}},
+        {"name": "research_state", "arguments": {"operation": "next_action"}},
+    ]
+
+    blocked, reminder, blind_rounds, hint = loop._research_search_guardrail(
+        mixed,
+        consecutive_blind_search_rounds=0,
+        messages=messages,
+    )
+
+    assert blocked is True
+    assert "Call research_state separately" in reminder
+    assert blind_rounds == 0
+    assert hint == ""
+
+
+@pytest.mark.asyncio
+async def test_structured_retrieval_tool_results_are_archived(tmp_path):
+    from agent_os.kernel.agent_loop import AgentLoop
+    from agent_os.tools.registry import ToolResult
+
+    class Sessions:
+        async def get(self, session_id):
+            return type("Session", (), {"work_dir": str(tmp_path)})()
+
+    class WorkspaceMemory:
+        def __init__(self):
+            self.saved = None
+
+        async def upsert_artifact(self, session_id, *, path, content, artifact_type, title, summary, metadata):
+            self.saved = {
+                "session_id": session_id,
+                "path": path,
+                "content": content,
+                "artifact_type": artifact_type,
+                "title": title,
+                "summary": summary,
+                "metadata": metadata,
+            }
+            return {"id": "artifact"}
+
+    loop = AgentLoop.__new__(AgentLoop)
+    loop.workspace_memory = WorkspaceMemory()
+    loop.sessions = Sessions()
+
+    archived_path = await loop._archive_external_tool_result(
+        "s1",
+        "openalex_works",
+        {"title": "test paper"},
+        ToolResult.ok(data={
+            "results": [{
+                "title": "Test Paper",
+                "url": "https://example.test/paper",
+                "authors": ["A. Researcher"],
+                "content": "Abstract text.",
+            }],
+            "count": 1,
+        }),
+    )
+
+    assert archived_path
+    assert archived_path.startswith("raw_search/openalex_works/")
+    assert loop.workspace_memory.saved["artifact_type"] == "external_retrieval"
+    assert "Test Paper" in loop.workspace_memory.saved["content"]
+    assert loop.workspace_memory.saved["metadata"]["lineage"]["source_urls"] == ["https://example.test/paper"]
+
+
+@pytest.mark.asyncio
+async def test_plugin_retrieval_tool_results_are_archived_by_toolset(tmp_path):
+    from agent_os.kernel.agent_loop import AgentLoop
+    from agent_os.tools.registry import ToolResult
+
+    class Tools:
+        def get_entry(self, name):
+            if name == "custom_literature_search":
+                return type("Entry", (), {"toolset": "retrieval"})()
+            return None
+
+    class WorkspaceMemory:
+        def __init__(self):
+            self.saved = None
+
+        async def upsert_artifact(self, session_id, *, path, content, artifact_type, title, summary, metadata):
+            self.saved = {"path": path, "content": content, "metadata": metadata}
+            return {"id": "artifact"}
+
+    loop = AgentLoop.__new__(AgentLoop)
+    loop.tools = Tools()
+    loop.workspace_memory = WorkspaceMemory()
+
+    archived_path = await loop._archive_external_tool_result(
+        "s1",
+        "custom_literature_search",
+        {"query": "test"},
+        ToolResult.ok(data={"query": "test", "results": [{"title": "Plugin Result", "url": "https://example.test"}]}),
+    )
+
+    assert archived_path
+    assert archived_path.startswith("raw_search/custom_literature_search/")
+    assert "Plugin Result" in loop.workspace_memory.saved["content"]
 
 
 def test_constraint_reasoning_skill_exists():

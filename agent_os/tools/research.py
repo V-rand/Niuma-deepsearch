@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .registry import ToolResult, get_session_id, get_session_work_dir, get_tool_registry
+from .registry import ToolResult, get_session_id, get_session_work_dir, get_tool_dep, get_tool_registry
 
 _DESC_DIR = Path(__file__).resolve().parent / "descriptions"
 _states: dict[str, dict[str, Any]] = {}
@@ -162,6 +162,32 @@ _LENSES: dict[str, list[str]] = {
     ],
 }
 
+_EXTERNAL_RETRIEVAL_TOOLS = [
+    "web_search",
+    "web_read",
+    "arxiv_search",
+    "crossref_search",
+    "openalex_works",
+    "openalex_entity",
+    "wikipedia_lookup",
+    "pubmed_search",
+    "opencitations_search",
+    "law_retrieve",
+    "case_retrieve",
+]
+
+
+def _external_retrieval_tools(*, except_tools: set[str] | None = None) -> list[str]:
+    exceptions = except_tools or set()
+    agent_loop = get_tool_dep("agent_loop")
+    tools = getattr(agent_loop, "tools", None)
+    if tools is not None:
+        return [
+            name for name in tools.get_tool_names_for_toolset("retrieval")
+            if name != "workspace_search" and name not in exceptions
+        ]
+    return [name for name in _EXTERNAL_RETRIEVAL_TOOLS if name not in exceptions]
+
 
 def _infer_constraint_type(text: str) -> str:
     lowered = text.lower()
@@ -199,13 +225,14 @@ def _action_card(
     if action == "inventory_known_facts":
         required_output = "List known facts and 2-5 possible reasoning paths for the active constraint."
         allowed = ["research_state"]
-        blocked = ["web_search", "web_read"]
+        blocked = _external_retrieval_tools()
         search_needed = "after_inventory"
         why = "The active constraint has not been grounded in known facts yet."
     elif action == "reason_from_known_facts":
         required_output = "Write 2-5 reasoning chains, mark which support/exclude the candidate, then decide whether search is only needed for verification."
         allowed = ["research_state", "wikipedia_lookup"]
-        blocked = ["web_search"]
+        # Permit lightweight encyclopedia verification while blocking broader retrieval drift.
+        blocked = _external_retrieval_tools(except_tools={"wikipedia_lookup"})
         search_needed = "only_for_verification" if facts or any(state["known_fact_inventory"].values()) else "after_inventory"
         why = "Known facts or reasoning paths may resolve the active constraint without another broad search."
         if ctype == "associative":
@@ -221,13 +248,13 @@ def _action_card(
     elif action == "answer_with_uncertainty":
         required_output = "Stop searching; answer with the best candidate and explicit uncertainty or say evidence is insufficient."
         allowed = ["research_state"]
-        blocked = ["web_search", "web_read"]
+        blocked = _external_retrieval_tools()
         search_needed = "no"
         why = "Two failed pivots mean more retrieval is unlikely to improve the answer this turn."
     elif action == "answer_allowed":
         required_output = "Provide the final short answer with compact justification."
         allowed = []
-        blocked = ["web_search", "web_read"]
+        blocked = _external_retrieval_tools()
         search_needed = "no"
         why = "A winner is available and competing candidates have been handled."
 
