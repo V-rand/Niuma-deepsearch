@@ -1,0 +1,13 @@
+搜索当前工作区内的文件内容和对话历史。返回匹配片段及来源路径。
+
+参数：
+- query: 检索关键词
+- limit: 最大返回数（默认8）
+
+返回：
+- query: 原始查询
+- results: [{source, path, content, score, artifact_type, title, chunk_index}]
+- count: 结果数
+
+搜索范围：所有 artifact（已解析文档、研究报告、草稿等）+ 对话消息
+不搜索外部网络或数据库。

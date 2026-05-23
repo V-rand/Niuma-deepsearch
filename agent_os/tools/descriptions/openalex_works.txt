@@ -1,0 +1,23 @@
+搜索 OpenAlex 学术论文数据库（2.7 亿+论文）。支持结构化字段过滤、引用指纹搜索、全文搜索。名称自动解析为 ID。
+
+参数（全部可选，至少提供一个）：
+- author/institution/venue/topic: 名称自动两段解析（search entity → get ID → filter works）
+- references: **引用指纹搜索**。逗号分隔的论文标题或 DOI。查找同时引用了全部指定论文的论文。如 references="Language Models are Few-Shot Learners, A Simple Framework for Contrastive Learning" 会找到同时引用 GPT-3 和 SimCLR 的论文——这对通过引用指纹锁定唯一论文非常有效。
+- title: 标题/摘要关键词全文搜索
+- year: 发表年份（"2022"）或范围（"2020-2024"）
+- type: 类型：article, book, dataset
+- source_type: 源类型过滤：conference, journal, repository（arXiv）, ebook
+- has_references: true 仅返回有参考文献列表的论文
+- language: 语言代码（en, zh）
+- indexed_in: 数据来源：arxiv, crossref, doaj, pubmed
+- is_oa: true 仅开放获取论文
+- doi: 按 DOI 精确查找单篇
+- openalex_id: 按 OpenAlex ID 精确查找
+- sort: 排序（cited_by_count:desc, publication_date:desc）
+- per_page: 每页结果数（默认 25，最大 100）
+
+返回：{total_count, results: [{title, doi, id, authors, author_count, institutions, venue, source_type, cited_by_count, topics, abstract, referenced_works_count}], resolution, filters_applied}
+
+与 arxiv_search 的互补：
+- openalex: 跨源全库，作者/机构/主题过滤最准，引用数据全。但 arXiv 论文不标 venue。
+- arxiv_search: arXiv 专属，comment/journal_ref 含会议录用信息。仅搜 arXiv。

@@ -1,0 +1,119 @@
+# =============================================================================
+# AgentOS 运行配置
+# -----------------------------------------------------------------------------
+# 这是唯一的运行参数配置文件。修改后重启即可生效，无需改代码。
+# API 密钥（OPENAI_API_KEY 等）请在 .env 文件中填写，不要写在这里。
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# 日志级别
+# ---------------------------------------------------------------------------
+log_level: "WARNING"              # DEBUG / INFO / WARNING / ERROR
+
+# ---------------------------------------------------------------------------
+# 模型提供商
+# ---------------------------------------------------------------------------
+# deepseek: DeepSeek 原生 API，需 DEEPSEEK_API_KEY
+#            优势：KV cache（~90%+命中）/ 完整并行工具调用 / thinking 模式
+# dashscope: 阿里云百炼兼容接口（已停用），需 OPENAI_API_KEY
+provider: "deepseek"
+
+# ---------------------------------------------------------------------------
+# 模型
+# ---------------------------------------------------------------------------
+model: "deepseek-v4-flash"        # 模型名称
+model_timeout_seconds: 200         # 单次模型请求超时（秒）
+max_iterations: 64                 # 单次对话最大 ReAct 迭代步数
+reasoning_effort: "high"           # DeepSeek 思考强度。high / max。DashScope 通过 enable_thinking 控制，reasoning_effort 不适用
+enable_explicit_cache: false       # DashScope 显式缓存（仅 deepseek-v3.2/qwen3/kimi/glm 支持）
+
+# ---------------------------------------------------------------------------
+# Workspace 默认模板
+# ---------------------------------------------------------------------------
+# 创建 session 时的默认工作区结构。skill 不带 profile 预设，统一由此配置。
+workspace:
+  folders:                         # 预创建的文件夹
+    - uploads                      # 用户原始材料（只读）
+    - research                     # 研究笔记与报告
+    - drafts                       # 草稿文档
+    - raw_search                   # 外部检索原始归档
+    - logs                         # 运行日志
+  files: {}                        # 预创建的文件（支持 {{session_name}} 占位符）；动态入口使用 MEMORY.md
+
+# ---------------------------------------------------------------------------
+# 禁用工具
+# ---------------------------------------------------------------------------
+# 全部可用工具：file_read, file_write, file_append, file_delete, file_list,
+#   file_grep, file_tree, workspace_search, law_retrieve, case_retrieve,
+#   web_search, web_read, arxiv_search, crossref_search, wikipedia_lookup,
+#   research_state, upload_parse, bash, todowrite, reminder_create, spawn,
+#   skill_use, skill_propose, question, send_msg, task_stop, edit
+# 不需要的工具写在这里，它们的 schema 不会发给模型：
+disabled_tools: []
+
+# ---------------------------------------------------------------------------
+# 工具超时与限制
+# ---------------------------------------------------------------------------
+# 以下参数影响工具执行行为和输出大小，可根据实际 API 响应速度调整。
+tool_timeouts:
+  bash_default: 60                 # bash 命令默认超时（秒）
+  law_retrieve: 30                 # 法规检索超时（秒）
+  case_retrieve: 30                # 案例检索超时（秒）
+  web_search: 20                   # 网络搜索超时（秒）
+  web_read: 20                     # 网页阅读超时（秒）
+
+tool_output_limits:
+  bash_stdout_max_chars: 100000    # bash 标准输出最大字符数
+  bash_stderr_max_chars: 20000     # bash 标准错误最大字符数
+  result_filter_threshold: 5000    # 检索结果超过此字符数时触发 LLM 摘要压缩
+
+# ---------------------------------------------------------------------------
+# web_read 提供商优先级
+# ---------------------------------------------------------------------------
+# 可选：jina, firecrawl, trafilatura。按顺序尝试，首个成功即返回。
+# web_read_provider_order:
+#   - jina
+#   - firecrawl
+#   - trafilatura
+
+# ---------------------------------------------------------------------------
+# Skills
+# ---------------------------------------------------------------------------
+# 追加自定义 skill 目录（默认已有项目内 skills/）
+# extra_skill_dirs: []
+#   - /path/to/company/skills
+
+# ---------------------------------------------------------------------------
+# 上下文与压缩
+# ---------------------------------------------------------------------------
+context_token_threshold: 600000   # 触发压缩的 token 阈值（DeepSeek API prompt_tokens 真实值）
+preserve_recent_tokens: 8000      # 压缩时保留的最近消息 token 预算
+max_context_messages: 8           # 编译 system prompt 时摄入的最近消息数
+max_context_items: 12             # 编译 system prompt 时摄入的检索结果条数
+
+# ---------------------------------------------------------------------------
+# 文档解析（MinerU）
+# ---------------------------------------------------------------------------
+mineru_base_url: "https://mineru.net/api/v1/agent"
+mineru_v4_base_url: "https://mineru.net/api/v4"
+mineru_premium_model_version: "vlm"
+mineru_timeout_seconds: 20        # 单次 API 请求超时
+mineru_poll_interval_seconds: 3   # 轮询间隔
+mineru_poll_timeout_seconds: 180  # 整体解析超时（含轮询）
+
+# ---------------------------------------------------------------------------
+# 子 Agent
+# ---------------------------------------------------------------------------
+sub_agent_max_iterations: 16      # 子 agent 单次任务最大迭代步数（降低避免无限搜索）
+
+# ---------------------------------------------------------------------------
+# 调度与提醒
+# ---------------------------------------------------------------------------
+scheduler_interval_seconds: 30    # 定时提醒检查间隔（秒）
+
+# ---------------------------------------------------------------------------
+# 外部集成密钥 — 请在 .env 中配置，不要写在这里
+#  OPENAI_API_KEY / DEEPSEEK_API_KEY / TAVILY_API_KEY / JINA_API_KEY
+#  FIRECRAWL_API_KEY / SERPER_API_KEY / DELI_APP_ID / DELI_APP_SECRET
+#  FEISHU_WEBHOOK / FEISHU_SECRET / MINERU_API_TOKEN
+# ---------------------------------------------------------------------------

@@ -1,0 +1,27 @@
+搜索 arXiv 学术论文。arXiv 覆盖计算机科学、数学、物理等领域的最新预印本。
+
+支持结构化字段搜索，比通用 web_search 更精准：
+- query: 通用文本搜索（标题、作者、摘要的关键词）
+- author: 按作者名搜索（如 "Yoshua_Bengio"）
+- title: 按标题词搜索（如 "transformer"）
+- category: 按 arXiv 分类（如 "cs.LG" = 机器学习、"stat.ML"、"cs.AI"、"cs.CL"、"math.ST"）
+- venue: 按会议/期刊名搜索（如 "Nature 2023"、"ACL 2024"、"ICML 2022" 等）。搜索 comment 和 abstract 字段
+- year: 按发表年份过滤（如 "2022"）
+- max_results: 最大返回数（默认5）
+
+参数可以任意组合：author + venue + year 精准找到某作者在某会议某年的论文；venue + year 浏览某会议某年的所有论文。year 参数通过 arXiv 的 submittedDate 过滤器实现，Semantic Scholar 回退也支持 year 过滤。
+
+返回结果包含 journal_ref（如 "Proceedings of Conference, PMLR 123"）和 comment（如 "Accepted at Conference 2022"），可用于验证论文所属会议。
+
+何时用（而非 web_search）：
+- 需要找到已知会议（ICML、NeurIPS、ICLR、CVPR、ACL 等）的特定论文 → 用 arxiv_search + venue 参数
+- 需要按作者精确搜索论文列表 → 用 arxiv_search + author 参数
+- 需要学术论文的元数据（摘要、作者列表、分类、引用信息）→ 用 arxiv_search
+- 只需要任意网络结果（新闻、博客、教程）→ 用 web_search
+
+查询技巧：用已知约束组合参数。如 arxiv_search(author="known_name", venue="conference", year="2022") 或 arxiv_search(title="topic_keywords", venue="conference")。
+
+返回：
+- query: 实际执行的查询
+- results: [{title, url, content(摘要), published, authors, categories, comment, journal_ref}]
+- count: 结果数

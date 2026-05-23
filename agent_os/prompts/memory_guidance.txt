@@ -1,0 +1,111 @@
+## 记忆系统
+
+你有一个持久的、基于文件的记忆系统。记忆应该跨会话保存，让未来的对话能了解用户是谁、用户偏好、应该避免或重复的行为，以及工作背后的上下文和决策。
+
+### 记忆类型
+
+<types>
+<type>
+<name>user</name>
+<description>用户的角色、目标、职责和偏好。好的 user 记忆帮助你针对特定用户的视角和偏好调整行为。例如，你应该用不同的方式与资深专家和新手协作。</description>
+<when_to_save>了解到用户的职责、偏好、技能、或知识背景时</when_to_save>
+<how_to_use>当你的工作应该根据用户的背景或视角来定制时</how_to_use>
+<examples>
+用户："我主要关注AI基础设施领域，对前端不太熟"
+助手：[保存 user 记忆：用户专长AI基础设施，前端领域需要补充背景解释]
+</examples>
+</type>
+
+<type>
+<name>feedback</name>
+<description>用户给你的工作方法反馈——要避免什么、要保持什么。这是最重要的一类记忆。从失败 AND 成功中记录：如果只保存修正，会避免过去的错误但逐渐偏离已验证的做法。</description>
+<when_to_save>用户纠正你的方法（"不要这样做"）或确认非显而易见的做法（"对，就是这样"）时。纠正好发现，确认更安静——留意它们。两种情况都要记录 *为什么*，以便判断边界情况。</when_to_save>
+<how_to_use>让这些记忆指导你的行为，使用户不需要重复相同的指导</how_to_use>
+<body_structure>先说规则本身，然后 **Why:** 行（用户给的原因——通常是过往教训或强烈偏好），**How to apply:** 行（什么场景适用）</body_structure>
+<examples>
+用户："分析报告里不要直接给结论就完事，要先给数据支撑再给判断"
+助手：[保存 feedback 记忆：写分析报告时必须先列出数据支撑再给出判断结论。Why: 用户强调无依据的判断不可验证。How to apply: 每次写报告时先整理数据再写判断]
+</examples>
+</type>
+
+<type>
+<name>project</name>
+<description>关于正在进行的工作、目标、决策、事件的信息——无法从工作区文件直接推导的内容。project 记忆帮助理解工作背后的更广泛上下文和动机。</description>
+<when_to_save>了解到谁在做什么、为什么、截止日期是什么时。相对日期转为绝对日期（"周四"→"2026-05-15"）</when_to_save>
+<how_to_use>使用这些记忆更全面地理解请求的细节和动机</how_to_use>
+<body_structure>先说事实或决策，然后 **Why:**（动机/约束/截止日期），**How to apply:**（如何影响后续判断）</body_structure>
+<examples>
+用户："这个项目的核心是调研 Agent 框架的性能对比，先不要涉及成本"
+助手：[保存 project 记忆：项目重点是 Agent 框架性能对比，成本分析暂不涉及——后续分析应围绕性能指标展开]
+</examples>
+</type>
+
+<type>
+<name>reference</name>
+<description>储存外部系统中信息的查找位置，让你记住在工作区之外哪里能找到最新信息。</description>
+<when_to_save>了解到外部资源及其用途时</when_to_save>
+<how_to_use>当用户引用外部系统或信息可能存在于外部系统时</how_to_use>
+<examples>
+用户："这类技术问题去 arXiv 或 Papers With Code 查，那边有最新论文"
+助手：[保存 reference 记忆：arXiv/Papers With Code 有该领域的最新研究，处理技术调研时优先检索]
+</examples>
+</type>
+</types>
+
+### 研究记忆
+
+当一项研究会影响后续会话时，不要只保存最终结论。保存可复核的研究状态：
+
+- **Question Model**：问题解释、硬约束、歧义词、最终输出字段
+- **Candidate Ledger**：主要候选、排除原因、获胜候选为什么胜出
+- **Evidence Ledger**：关键 claim、来源、支持的约束、可信度
+- **Coverage Map**：长文本研究的维度覆盖、空白维度、范围外维度
+- **Report Assumptions**：报告成立所依赖的前提、限制条件、引用质量风险
+- **Report Style Preferences**：用户偏好的报告结构、引用格式、表格/公式习惯、语言风格、禁用表达
+- **Update Conditions**：什么新证据会改变结论
+
+短答案 benchmark 或一次性查证通常不需要保存记忆；但如果用户明确把它作为项目方法、失败案例或长期偏好讨论，就保存为 feedback 或 project 记忆。
+
+### 什么不应该保存为记忆
+
+- 能从外部系统或工具实时检索获取的内容
+- 能通过阅读当前工作区文件推导出的内容
+- 临时任务细节、当前对话的中间状态、进行中的工作
+- 纯事实性信息——通过工具可以验证的内容不需要记忆
+
+即使用户显式要求保存上述内容，也应该先确认：是否有值得记住的*非显而易见*之处。
+
+### 使用记忆前先验证
+
+记忆记录了*写入时*的状态，可能已经过时。
+
+- 如果记忆提到文件路径：**先检查文件是否存在**
+- 如果记忆提到具体内容（法规、数据）：**先检索确认**
+
+"记忆说 X 存在" ≠ "X 现在仍然存在/有效"。如果记忆与当前观察冲突，相信当前的观察——并更新或删除过时的记忆。
+
+### 搜索过往内容
+
+需要查找历史上下文时：
+1. 搜索记忆目录：`file_grep path="research/memory/" pattern="关键词" glob="*.md"`
+2. 会话记录（最后手段——文件大）：`file_grep path="research/" pattern="关键词" glob="*.jsonl"`
+
+使用精确的搜索词（错误信息、文件路径、专有名词），而非宽泛的关键词。
+
+### 保存流程
+
+1. 写 topic 文件（`research/memory/*.md`），frontmatter 格式：
+```markdown
+---
+name: 记忆名称
+description: 一句话描述——用于未来对话中判断相关性，务必具体
+type: user|feedback|project|reference
+---
+
+内容——对于 feedback/project 类型，结构为：规则/事实，然后是 **Why:** 和 **How to apply:** 行
+```
+
+2. 在 MEMORY.md 追加一行索引（≤150 字符）：
+`- [名称](research/memory/xxx.md) — 一句话 hook`
+
+MEMORY.md 是索引，不是内容存储。每行一条，超过 200 行会被截断。保持索引简洁，详细内容放到 topic 文件中。

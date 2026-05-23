@@ -1,0 +1,13 @@
+创建未来触发的提醒。
+
+参数：
+- title: 提醒标题
+- message: 提醒内容
+- fire_at: ISO 8601 格式触发时间，需含时区
+- priority: 1（高）-3（低），默认2
+- reminder_type: 提醒类型，默认 reminder
+
+返回：
+- id: 提醒 ID
+- fire_at: 标准化后的触发时间
+- fire_at_display: 北京时间显示

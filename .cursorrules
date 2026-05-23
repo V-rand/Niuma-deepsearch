@@ -1,0 +1,51 @@
+You are an expert Python developer working on AgentOS4Law — a general AgentOS for legal work. Keep responses concise and technical.
+
+## Project Structure
+- `agent_os/`: core runtime
+  - `core/`: session manager, filesystem, event bus
+  - `kernel/`: AgentLoop (ReAct), SubAgent (spawn), helpers, ResultFilterAgent
+  - `memory/`: ContextCompiler, EmbeddingClient, SessionRetriever, WorkspaceMemory
+  - `storage/`: SQLiteStore (session, messages, artifacts, FTS5, embeddings)
+  - `tools/`: ToolRegistry, base tools (concurrency_safe metadata), web tools, search, skills, plugins/
+  - `scheduler/`: InterruptScheduler, reminder firing, Feishu notifications
+- `cli.py`: Rich CLI — prompt_toolkit + pipe/stdin mode. No --session or --non-tty flags.
+- `config.yaml`: model, provider, compression thresholds, tool control
+- `skills/`: auto-discovered SKILL.md files (conditional skills via fnmatch path matching)
+- Run from agent_os4law/ (NOT workspace root)
+
+## Build & Test Commands
+```
+uv run python cli.py                    # CLI
+uv run python -m compileall agent_os cli.py  # Syntax check
+```
+
+## Key Architecture Rules
+- **Kernel is generic** — no business logic. Add via skills and tools.
+- **Session = case workspace** — long-lived, with files, messages, artifacts, todos, reminders
+- **Events are typed dicts** — `{type, phase, detail, payload}`. CLI/TUI/API are just consumers.
+- **Sub-agents are isolated sessions** — `parent_session_id` links them. Share `work_dir`. Own `asyncio.Event` for interrupt.
+- **Skills are pure Markdown** — YAML frontmatter (`name`, `description`, `when_to_use`). Conditional: gitignore-style fnmatch.
+- **Tool plugins auto-discovered** — `tools/plugins/*.py` → `register(r)` function. New tools default `concurrency_safe=False`.
+
+## Naming & Style
+- Python 3.11+, snake_case, PascalCase classes, type hints on public methods
+- 4-space indent. No tabs.
+- Keep modules direct. Avoid unnecessary abstraction. Prefer explicit errors over `except: pass`.
+
+## Security
+- Secrets from `.env` only. Not hardcoded.
+- `_safe_workspace_path()` prevents path traversal (`..` and absolute paths).
+- Sub-agent tools restrictable via `allowed_tools` list.
+- `deleted_tools` / `enabled_tools` in config.yaml for tool-level access control.
+
+## Common Gotchas
+- **Don't break KV cache**: timestamp injects as user message after workspace tree, before history.
+- **Don't modify system prompt prefix** — it changes the cache key. Memory content goes in user context.
+- Memory via `file_write research/memory/*.md` — no `memory_update` tool anymore.
+- File read dedup: same file + mtime + full read → `[unchanged]` stub.
+- bash output >20K chars → `raw_search/bash/{ts}.txt` with tail preview.
+- `compileall` may not detect some errors; always run the file to test.
+- Static methods must be inside the class body — module-level defs between class methods silently close the class.
+- Termios/tty interaction: prompt_toolkit sets raw mode; always restore with `stty sane` on exit.
+- Sub-agent abort cascade via separate `child_interrupt` asyncio.Event per child.
+- NO_PROXY auto-set for api.deepseek.com + dashscope.aliyuncs.com when HTTP_PROXY active.

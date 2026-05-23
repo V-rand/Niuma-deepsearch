@@ -1,0 +1,12 @@
+检索相似案例和裁判观点。
+
+参数：
+- query: 案例检索问题或关键词
+- top_k: 返回结果数量（默认5）
+
+返回：
+- query: 原始查询
+- results: [{title, content, source, caseNo, court}]
+- count: 结果数
+
+结果自动归档到 raw_search/case/，可复用。

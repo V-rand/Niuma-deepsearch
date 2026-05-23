@@ -1,0 +1,319 @@
+# Authoritative site directory for domain-locked web_search.
+# Format: domain_key: [list of domains (no https://, no path)]
+# Order = priority. Add domains by appending to list.
+#
+# Usage: call domain_sites(domain="key") to get site_operators + include_domains.
+# For multi-domain questions, call domain_sites() once per relevant domain.
+#
+# ═══════════════════════════════════════════════════════════════════
+# TIER 1: ELITE MULTIDISCIPLINARY — used across many fields
+# ═══════════════════════════════════════════════════════════════════
+
+elite_multidisciplinary:
+  - nature.com            # Nature (all sciences)
+  - science.org           # Science (AAAS, all sciences)
+  - pnas.org              # PNAS (broad)
+  - cell.com              # Cell Press (life sciences)
+  - nejm.org              # New England Journal of Medicine (top clinical)
+  - thelancet.com         # The Lancet (top medical)
+  - bmj.com               # British Medical Journal
+  - springer.com          # Springer Nature (all fields)
+  - ieeexplore.ieee.org   # IEEE (engineering/CS/EE)
+  - dl.acm.org            # ACM Digital Library (CS)
+  - jstor.org             # JSTOR (humanities/social sciences)
+  - plos.org              # PLOS (open access, all fields)
+  - wiley.com             # Wiley (all fields)
+  - tandfonline.com       # Taylor & Francis (all fields)
+  - elsevier.com          # Elsevier (all fields)
+  - sagepub.com           # SAGE (social sciences)
+
+# ═══════════════════════════════════════════════════════════════════
+# TIER 2: FIELD-SPECIFIC AUTHORITATIVE SOURCES
+# ═══════════════════════════════════════════════════════════════════
+
+# --- Computer Science 计算机 ---
+cs_conferences:
+  - dblp.org              # CS bibliography (all venues)
+  - arxiv.org             # Preprints (CS, math, physics)
+  - openreview.net        # ML conference peer review
+  - usenix.org            # Systems/security conferences (OSDI, ATC, Security)
+  - acm.org               # ACM (SIGCOMM, SIGMOD, SIGGRAPH, etc.)
+  - ieee.org              # IEEE (INFOCOM, CVPR via CVF, etc.)
+  - nips.cc               # NeurIPS proceedings
+  - icml.cc               # ICML proceedings
+  - aclanthology.org      # ACL (NLP conferences)
+  - sigcomm.org           # SIGCOMM
+  - sigmod.org            # SIGMOD (databases)
+  - cv-foundation.org     # CVPR/ICCV (via openaccess.thecvf.com)
+  - isoc.org              # IETF/IRTF proceedings
+  - vldb.org              # VLDB (databases)
+
+# --- Biology 生物 ---
+biology:
+  - ncbi.nlm.nih.gov      # NCBI (GenBank, BLAST, PubMed)
+  - ebi.ac.uk             # European Bioinformatics Institute
+  - uniprot.org           # UniProt protein database
+  - genome.gov            # NHGRI
+  - gbif.org              # Global Biodiversity Information Facility
+  - iucnredlist.org       # IUCN Red List (species)
+  - tolweb.org            # Tree of Life Web Project
+  - wormbase.org          # C. elegans model organism
+  - flybase.org           # Drosophila
+  - arabidopsis.org       # TAIR (plant biology)
+  - rcsb.org              # Protein Data Bank
+  - pfam.xfam.org         # Pfam protein families
+  - reactome.org          # Pathway database
+  - string-db.org         # Protein interaction networks
+
+# --- Materials Science 材料 ---
+materials:
+  - nature.com/materials   # Nature Materials (and family)
+  - aip.org               # American Institute of Physics
+  - iop.org               # Institute of Physics
+  - materialsproject.org  # Materials Project (computational)
+  - rsc.org               # Royal Society of Chemistry
+  - acs.org               # American Chemical Society
+  - mrs.org               # Materials Research Society
+  - tms.org               # The Minerals, Metals & Materials Society
+  - aip.scitation.org     # AIP Publishing
+  - aps.org               # American Physical Society
+  - sciencedirect.com     # Elsevier materials journals
+
+# --- Chemistry 化学 ---
+chemistry:
+  - pubchem.ncbi.nlm.nih.gov  # PubChem
+  - cas.org               # Chemical Abstracts Service
+  - rsc.org               # Royal Society of Chemistry
+  - acs.org               # American Chemical Society
+  - chemspider.com        # ChemSpider
+  - commonchemistry.cas.org  # CAS Common Chemistry
+  - ebi.ac.uk/chebi       # ChEBI chemical entities
+  - chemrxiv.org          # Chemistry preprint server
+  - iupac.org             # International Union of Pure and Applied Chemistry
+
+# --- Environmental Science 环境 ---
+environment:
+  - ipcc.ch               # IPCC climate reports
+  - epa.gov               # US Environmental Protection Agency
+  - noaa.gov              # NOAA (ocean/atmosphere data)
+  - nasa.gov/climate      # NASA climate
+  - unep.org              # UN Environment Programme
+  - wmo.int               # World Meteorological Organization
+  - eea.europa.eu         # European Environment Agency
+  - carbonbrief.org       # Carbon Brief (climate science)
+  - sciencedirect.com     # Elsevier environmental journals
+  - ourworldindata.org    # Environmental data
+  - worldbank.org         # World Bank environment data
+  - fao.org               # UN Food & Agriculture (land/water)
+
+# --- Mathematics 数学 ---
+mathematics:
+  - ams.org               # American Mathematical Society
+  - mathscinet.ams.org    # MathSciNet (reviews)
+  - arxiv.org             # arXiv math
+  - projecteuclid.org     # Project Euclid (math/statistics)
+  - zbmath.org            # zbMATH Open
+  - emis.de               # European Mathematical Information Service
+  - msp.org               # Mathematical Sciences Publishers
+  - imstat.org            # Institute of Mathematical Statistics
+  - siam.org              # SIAM (applied math)
+  - maa.org               # Mathematical Association of America
+
+# --- Physics 物理 ---
+physics:
+  - aps.org               # American Physical Society (PRL, PRB, PRD, etc.)
+  - iop.org               # Institute of Physics
+  - aip.org               # American Institute of Physics
+  - arxiv.org             # arXiv (physics, astro-ph, hep-th, etc.)
+  - cern.ch               # CERN
+  - inspirehep.net        # High-energy physics database
+  - adsabs.harvard.edu    # Astrophysics Data System
+  - iaea.org              # International Atomic Energy Agency
+  - slac.stanford.edu     # SLAC
+  - phys.org              # Physics news
+
+# --- Law / 法律 ---
+legal_cn:
+  - npc.gov.cn
+  - flk.npc.gov.cn
+  - gov.cn
+  - pkulaw.com
+  - chinalaw.gov.cn
+  - court.gov.cn
+  - splcgk.court.gov.cn
+
+legal_en:
+  - law.cornell.edu
+  - legislation.gov.uk
+  - eur-lex.europa.eu
+  - austlii.edu.au
+  - canlii.org
+  - supremecourt.gov
+  - congress.gov
+
+legal_historical:
+  - flk.npc.gov.cn
+  - pkulaw.com
+  - npc.gov.cn
+  - loc.gov
+
+# --- Medicine / 医学 ---
+medical:
+  - who.int
+  - nih.gov
+  - pubmed.ncbi.nlm.nih.gov
+  - cdc.gov
+  - cochrane.org
+  - nhs.uk
+  - fda.gov
+  - uptodate.com
+  - mayoclinic.org
+
+# --- Academic general / 学术通用 ---
+academic:
+  - arxiv.org
+  - semanticscholar.org
+  - scholar.google.com
+  - openalex.org
+  - researchgate.net
+  - academia.edu
+
+# --- History / 历史 ---
+historical:
+  - britannica.com
+  - history.com
+  - jstor.org
+  - archives.gov
+  - loc.gov
+  - bl.uk
+  - history.ac.uk
+  - worldhistory.org
+
+# --- Science general / 科学新闻 ---
+scientific:
+  - nature.com
+  - science.org
+  - pnas.org
+  - scientificamerican.com
+  - newscientist.com
+  - phys.org
+  - chemistryworld.com
+  - eurekalert.org
+
+# --- Tech / programming / 技术开发 ---
+tech_programming:
+  - github.com
+  - stackoverflow.com
+  - docs.python.org
+  - developer.mozilla.org
+  - npmjs.com
+  - pypi.org
+  - rust-lang.org
+  - golang.org
+  - kubernetes.io
+  - docker.com
+
+# --- Finance / 金融经济 ---
+finance:
+  - investopedia.com
+  - bloomberg.com
+  - reuters.com
+  - fred.stlouisfed.org
+  - imf.org
+  - worldbank.org
+  - oecd.org
+  - sec.gov
+  - finance.yahoo.com
+  - tradingeconomics.com
+
+# --- Government / 政府数据 ---
+government_cn:
+  - gov.cn
+  - stats.gov.cn
+  - mofcom.gov.cn
+  - mof.gov.cn
+  - nmpa.gov.cn
+  - samr.gov.cn
+  - customs.gov.cn
+
+government_en:
+  - data.gov
+  - data.gov.uk
+  - data.europa.eu
+  - census.gov
+  - bls.gov
+  - europa.eu
+
+# --- Patents / 专利 ---
+patents:
+  - patents.google.com
+  - uspto.gov
+  - cnipa.gov.cn
+  - wipo.int
+  - epo.org
+  - lens.org
+
+# --- News / 新闻事实核查 ---
+news_factcheck:
+  - reuters.com
+  - apnews.com
+  - bbc.com
+  - xinhuanet.com
+  - factcheck.org
+  - politifact.com
+  - snopes.com
+
+# --- Encyclopedia / 百科 ---
+encyclopedia:
+  - en.wikipedia.org
+  - zh.wikipedia.org
+  - britannica.com
+  - baike.baidu.com
+
+# --- Geography / 地理 ---
+geography:
+  - openstreetmap.org
+  - cia.gov/the-world-factbook
+  - britannica.com
+  - worldatlas.com
+  - naturalearthdata.com
+
+# --- Standards / 标准 ---
+standards:
+  - iso.org
+  - ieee.org
+  - itu.int
+  - w3.org
+  - ietf.org
+  - ansi.org
+  - sac.gov.cn
+
+# --- Film / media / 影视 ---
+film_media:
+  - imdb.com
+  - themoviedb.org
+  - rottentomatoes.com
+  - metacritic.com
+  - boxofficemojo.com
+
+# ═══════════════════════════════════════════════════════════════════
+# TIER 3: COMMON KNOWLEDGE / LIFE / 生活常识
+# ═══════════════════════════════════════════════════════════════════
+
+common_knowledge:
+  - en.wikipedia.org      # Wikipedia (general reference, first stop)
+  - zh.wikipedia.org      # Chinese Wikipedia
+  - britannica.com        # Britannica
+  - baike.baidu.com       # Baidu Baike
+  - howstuffworks.com     # How things work
+  - thoughtco.com         # Educational reference
+  - nationalgeographic.com  # Geography, nature, culture
+  - history.com           # History
+  - biography.com         # Biographies
+  - worldatlas.com        # Maps, geography facts
+  - timeanddate.com       # Time zones, calendars, holidays
+  - weather.com           # Weather
+  - snopes.com            # Urban legends, fact-check
+  - mentalfloss.com       # Trivia, interesting facts
+  - atlasobscura.com      # Unusual places, facts
+  - worldometers.info     # Real-time world statistics

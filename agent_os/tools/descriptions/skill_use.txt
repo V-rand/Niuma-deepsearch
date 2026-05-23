@@ -1,0 +1,6 @@
+加载指定 skill 的完整指令到对话中。Skill 名称见系统提示中的 <available_skills> 列表。
+
+参数：
+- name: Skill 名称（与 <available_skills> 中的 name 一致）
+
+返回 skill 的 Markdown 正文、base 目录路径和支持文件列表。skill 指令将在本次对话中生效，不会改变系统提示。

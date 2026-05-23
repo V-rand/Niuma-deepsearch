@@ -1,0 +1,16 @@
+搜索 PubMed 生物医学文献数据库（3,600 万+期刊论文、预印本、书籍）。免费，无需 API key。
+
+参数（全部可选，至少提供一个）：
+- query: 通用关键词搜索
+- author: 作者名（如 "Fauci AS"）
+- title: 标题关键词
+- journal: 期刊名（如 "Nature"、"Lancet"）
+- mesh: MeSH 主题词（如 "Diabetes Mellitus"、"COVID-19"）
+- year: 发表年份（如 "2023"）
+
+支持 PubMed 字段标签：[Author]、[Title]、[Journal]、[MeSH Terms]、[Publication Date]
+参数组合：author + year 找某作者某年的论文；mesh + year 找某主题某年的文献。
+
+返回：{total_count, results: [{pmid, title, authors, author_count, journal, pubdate, doi, url}], count}
+
+限制：NCBI 要求 ≤3 请求/秒（已内置速率控制）。结果上限 20 条。

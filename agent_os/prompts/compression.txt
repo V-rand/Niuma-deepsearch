@@ -1,0 +1,87 @@
+First, analyze the conversation in <analysis> tags. This is a drafting scratchpad — work through each message chronologically to organize your thoughts before writing the final summary.
+
+In your analysis:
+1. Chronologically walk through each message and section of the conversation. For each, identify:
+   - The user's explicit requests and intents
+   - Your approach and tool calls
+   - Key decisions, concepts, and findings
+   - Specific details: file names, paths, data points, full tool output where relevant
+   - Errors and how you fixed them — pay special attention to user feedback that told you to change your approach
+2. Double-check for accuracy and completeness before closing the analysis.
+
+Then output the final summary in <summary> tags using the template below. Keep section order unchanged. Do not include the <template> tags or any additional text outside <summary>.
+
+<previous-summary>
+{previous_summary}
+</previous-summary>
+
+<template>
+## Goal
+- [single-sentence task summary]
+
+## Constraints & Preferences
+- [user constraints, preferences, specs, or "(none)"]
+
+## Progress
+### Done
+- [completed work or "(none)"]
+
+### In Progress
+- [current work or "(none)"]
+
+### Blocked
+- [blockers or "(none)"]
+
+## Key Decisions
+- [decision and why, or "(none)"]
+
+## Next Steps
+- [ordered next actions. If there is a next step, include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off.]
+
+## Critical Context
+- [important facts, errors, open questions, or "(none)"]
+
+## Relevant Files
+- [file or directory path: why it matters, or "(none)"]
+</template>
+
+Example output structure:
+
+<analysis>
+[Your thought process — walk through conversation chronologically, ensuring all points covered]
+</analysis>
+
+<summary>
+## Goal
+...
+
+## Constraints & Preferences
+...
+
+## Progress
+### Done
+...
+
+### In Progress
+...
+
+### Blocked
+...
+
+## Key Decisions
+...
+
+## Next Steps
+...
+
+## Critical Context
+...
+
+## Relevant Files
+...
+</summary>
+
+---
+CONVERSATION TO SUMMARIZE:
+{content}
+---

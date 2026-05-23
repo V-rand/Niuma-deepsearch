@@ -1,0 +1,16 @@
+执行 bash 命令。工作目录为当前 session 的工作目录。
+
+参数：
+- command: 要执行的命令
+- timeout: 超时秒数（默认60）
+
+返回：
+- command: 原始命令
+- returncode: 退出码
+- stdout: 标准输出（截断100K字符）
+- stderr: 标准错误（截断20K字符）
+- success: 是否成功退出
+
+注意：
+- 文件操作优先用 file_* 工具（有权限校验和 artifact 同步）
+- 命令在工作目录执行，不是系统任意位置

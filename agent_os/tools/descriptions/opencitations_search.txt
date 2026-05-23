@@ -1,0 +1,22 @@
+查询 OpenCitations COCI（开放引用图，12 亿+引用链接），追踪论文引用关系。全部数据 CC0 免费，无版权限制。
+
+参数：
+- doi: DOI（如 "10.1038/s41586-023-06221-2"）
+- pmid: PubMed ID（如 "12345678"）
+- mode: 操作模式
+  - citations（默认）：查找引用了此论文的所有论文（前向引用）
+  - references：查找此论文引用的所有论文（后向引用）
+  - citation_count：被引次数
+  - reference_count：参考文献数量
+- max_results: 最大返回数（默认 100）
+
+返回格式：
+- citations/references 模式：{identifier, mode, total_count, results: [{oci, citing, cited, creation, timespan, journal_self_citation, author_self_citation}]}
+- citation_count/reference_count 模式：{identifier, mode, count}
+
+与 OpenAlex 对比：
+- COCI：纯引用图，1.2B+ 链接，含自引标注（期刊级/作者级），CC0
+- OpenAlex：论文元数据 + 引用计数，但引用列表不如 COCI 全面
+- 建议：需要引用网络分析时用 COCI，需要论文元数据检索时用 OpenAlex
+
+限制：API 速率限制 180 请求/分钟/IP（已内置速率控制）。无需 API key。

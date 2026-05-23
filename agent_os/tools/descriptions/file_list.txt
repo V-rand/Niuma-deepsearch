@@ -1,0 +1,11 @@
+列出目录内容。如果目录不存在则返回错误。
+
+参数：
+- path: 目录路径（相对工作目录，默认当前目录）
+
+返回：
+- path: 查询的目录
+- items: [{name, type(file/directory), size, lines}]
+- count: 条目数
+
+注意：lines 只对文本文件有效，目录为 0

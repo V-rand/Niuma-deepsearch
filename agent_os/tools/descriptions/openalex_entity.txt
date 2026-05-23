@@ -1,0 +1,14 @@
+查询 OpenAlex 实体（作者、机构、期刊/会议、研究主题）。返回 ID、名称、作品数、引用次数。
+
+参数：
+- entity_type: "author" | "institution" | "source" | "venue" | "topic"
+- search: 搜索关键词
+- per_page: 每页结果数（默认 10）
+
+返回：
+- results: [{id, display_name, works_count, cited_by_count, country_code, type}]
+- 获取到 ID 后，在 openalex_works 中配合过滤，精准检索该实体相关论文
+
+两步模式（核心用法）：
+1. openalex_entity(entity_type="author", search="Yoshua Bengio") → 获取 ID A12345
+2. openalex_works(author="known_researcher", venue="conference_name", year="2022") → 自动解析并过滤

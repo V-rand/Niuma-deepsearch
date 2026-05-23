@@ -1,0 +1,12 @@
+向系统提议创建或更新一个 skill。Skill 提案写入 research/skill_proposals/ 目录，经人工审核后方可生效。
+
+参数：
+- name: Skill 名称（建议使用英文小写 + 下划线）
+- content: Skill 的 Markdown 正文（不含 YAML frontmatter）
+- description: Skill 的简短描述（可选，用于 <available_skills> 索引）
+
+规则：
+- 完成复杂任务后，如果发现该流程可以固化，应通过此工具提议创建 skill
+- 如果现有 skill 在多次使用中发现不足，也应通过此工具提议改进
+- 提案不是最终修改——需要人工 review 后移入 skills/ 目录才生效
+- 不要提议修改内核代码（agent_os/）或系统提示词（prompts/）
